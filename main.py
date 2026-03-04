@@ -20,11 +20,9 @@ EMOJI_PROMO       = "5444856076954520455"
 EMOJI_INSTRUCT    = "5334544901428229844"
 EMOJI_BACK        = "5906771962734057347"
 EMOJI_WALLET      = "5443127283898405358"
-EMOJI_WITHDRAWAL  = "5445355530111437729"
 EMOJI_MINES       = "5307996024738395492"
 EMOJI_GOLD        = "5278467510604160626"
 EMOJI_STATS       = "5197288647275071607"
-EMOJI_CRYPTOBOT   = "5427054176246991778"
 EMOJI_DEVELOPMENT = "5445355530111437729"
 EMOJI_WELCOME     = "5199885118214255386"
 
@@ -44,16 +42,10 @@ def get_or_create_user(user) -> dict:
             "first_name":    user.first_name or "",
             "last_name":     user.last_name  or "",
             "username":      user.username   or "",
-            "balance":       0.0,
             "px":            0,
             "games_played":  0,
-            "games_won":     0,
-            "games_lost":    0,
             "total_won":     0.0,
             "total_lost":    0.0,
-            "total_dep":     0.0,
-            "total_with":    0.0,
-            "referrals":     0,
             "registered_at": datetime.now(),
         }
     else:
@@ -134,7 +126,7 @@ def dev_text(section: str) -> str:
 
 
 # ─────────────────────────────────────────
-#  Тексты профиля
+#  Тексты
 # ─────────────────────────────────────────
 MAIN_TEXT = (
     f'<blockquote>'
@@ -158,8 +150,7 @@ def build_profile_text(user: dict) -> str:
         f'🆔  <b>ID:</b> <code>{user["id"]}</code>'
         f'</blockquote>\n\n'
         f'<blockquote>'
-        f'<tg-emoji emoji-id="{EMOJI_WALLET}">💰</tg-emoji>  <b>Баланс:</b> <code>{user["balance"]:,.2f}</code>\n'
-        f'<tg-emoji emoji-id="{EMOJI_GOLD}">⚡</tg-emoji>  <b>Px:</b> <code>{user["px"]} Px</code>'
+        f'<tg-emoji emoji-id="{EMOJI_GOLD}">⚡</tg-emoji>  <b>Баланс:</b> <code>{user["px"]} Px</code>'
         f'</blockquote>\n\n'
         f'<blockquote>'
         f'📅  <b>В проекте с:</b> {reg}\n'
@@ -168,52 +159,24 @@ def build_profile_text(user: dict) -> str:
     )
 
 def build_stats_text(user: dict) -> str:
-    days      = days_in_project(user["registered_at"])
-    label     = days_label(days)
-    played    = user["games_played"]
-    won       = user["games_won"]
-    lost      = user["games_lost"]
-    winrate   = round(won / played * 100) if played > 0 else 0
-    profit    = user["total_won"] - user["total_lost"]
-    profit_sign = "+" if profit >= 0 else ""
+    days  = days_in_project(user["registered_at"])
+    label = days_label(days)
 
     return (
         f'<tg-emoji emoji-id="{EMOJI_STATS}">📊</tg-emoji> <b>Статистика</b>\n\n'
-
         f'<blockquote>'
-        f'🪪  <b>Имя:</b> {user["first_name"]} {user["last_name"]}\n'
         f'🆔  <b>ID:</b> <code>{user["id"]}</code>\n'
-        f'📅  <b>В проекте:</b> <code>{days} {label}</code>'
-        f'</blockquote>\n\n'
-
-        f'<blockquote>'
-        f'<tg-emoji emoji-id="{EMOJI_WALLET}">💰</tg-emoji>  <b>Баланс:</b> <code>{user["balance"]:,.2f}</code>\n'
-        f'<tg-emoji emoji-id="{EMOJI_GOLD}">⚡</tg-emoji>  <b>Px:</b> <code>{user["px"]} Px</code>\n'
-        f'📥  <b>Депозитов:</b> <code>{user["total_dep"]:,.2f}</code>\n'
-        f'📤  <b>Выводов:</b> <code>{user["total_with"]:,.2f}</code>'
-        f'</blockquote>\n\n'
-
-        f'<blockquote>'
-        f'🎮  <b>Игр сыграно:</b> <code>{played}</code>\n'
-        f'✅  <b>Побед:</b> <code>{won}</code>\n'
-        f'❌  <b>Поражений:</b> <code>{lost}</code>\n'
-        f'📈  <b>Винрейт:</b> <code>{winrate}%</code>'
-        f'</blockquote>\n\n'
-
-        f'<blockquote>'
-        f'💸  <b>Выиграно:</b> <code>{user["total_won"]:,.2f}</code>\n'
-        f'💔  <b>Проиграно:</b> <code>{user["total_lost"]:,.2f}</code>\n'
-        f'📊  <b>Профит:</b> <code>{profit_sign}{profit:,.2f}</code>'
-        f'</blockquote>\n\n'
-
-        f'<blockquote>'
-        f'👥  <b>Рефералов:</b> <code>{user["referrals"]}</code>'
+        f'<tg-emoji emoji-id="{EMOJI_GOLD}">⚡</tg-emoji>  <b>Баланс:</b> <code>{user["px"]} Px</code>\n'
+        f'🎮  <b>Сыграно игр:</b> <code>{user["games_played"]}</code>\n'
+        f'✅  <b>Выиграно всего:</b> <code>{user["total_won"]:,.2f}</code>\n'
+        f'❌  <b>Проиграно всего:</b> <code>{user["total_lost"]:,.2f}</code>\n'
+        f'🗓  <b>Дней в проекте:</b> <code>{days} {label}</code>'
         f'</blockquote>'
     )
 
 
 # ─────────────────────────────────────────
-#  Разделы — все в разработке кроме профиля
+#  Разделы в разработке
 # ─────────────────────────────────────────
 DEV_SECTIONS = {
     "referrals":   "Рефералы",
@@ -259,20 +222,13 @@ async def cb_stats(call: CallbackQuery):
 
 @dp.callback_query(F.data == "buy_px")
 async def cb_buy_px(call: CallbackQuery):
-    await call.message.edit_text(
-        dev_text("Купить Px"),
-        reply_markup=back_profile_keyboard()
-    )
+    await call.message.edit_text(dev_text("Купить Px"), reply_markup=back_profile_keyboard())
     await call.answer()
 
 
 @dp.callback_query(F.data.in_(DEV_SECTIONS.keys()))
 async def cb_dev_section(call: CallbackQuery):
-    name = DEV_SECTIONS[call.data]
-    await call.message.edit_text(
-        dev_text(name),
-        reply_markup=back_main_keyboard()
-    )
+    await call.message.edit_text(dev_text(DEV_SECTIONS[call.data]), reply_markup=back_main_keyboard())
     await call.answer()
 
 
