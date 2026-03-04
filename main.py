@@ -1,8 +1,8 @@
 import asyncio
 from aiogram import Bot, Dispatcher, F
-from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import CommandStart
-from aiogram.utils.keyboard import ReplyKeyboardBuilder
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 BOT_TOKEN = "8545314102:AAGMDpkutDPoqPuIMcjMawQMCKHQgnXWPho"
 
@@ -11,42 +11,48 @@ dp = Dispatcher()
 
 
 # ─────────────────────────────────────────
-#  Клавиатура главного меню
+#  Инлайн-клавиатура главного меню
 # ─────────────────────────────────────────
-def main_menu_keyboard() -> ReplyKeyboardMarkup:
-    builder = ReplyKeyboardBuilder()
+def main_menu_keyboard() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
 
     # Ряд 1 — 3 кнопки
     builder.row(
-        KeyboardButton(text="👤 Профиль"),
-        KeyboardButton(text="👥 Рефералы"),
-        KeyboardButton(text="🎮 Игры"),
+        InlineKeyboardButton(text="👤 Профиль",   callback_data="profile"),
+        InlineKeyboardButton(text="👥 Рефералы",  callback_data="referrals"),
+        InlineKeyboardButton(text="🎮 Игры",      callback_data="games"),
     )
     # Ряд 2 — 2 кнопки
     builder.row(
-        KeyboardButton(text="🏆 Лидеры"),
-        KeyboardButton(text="💹 Биржа"),
+        InlineKeyboardButton(text="🏆 Лидеры",   callback_data="leaders"),
+        InlineKeyboardButton(text="💹 Биржа",     callback_data="exchange"),
     )
     # Ряд 3 — 3 кнопки
     builder.row(
-        KeyboardButton(text="🎁 Бонус"),
-        KeyboardButton(text="🎟 Промокоды"),
-        KeyboardButton(text="⛏ Шахта"),
+        InlineKeyboardButton(text="🎁 Бонус",     callback_data="bonus"),
+        InlineKeyboardButton(text="🎟 Промокоды", callback_data="promocodes"),
+        InlineKeyboardButton(text="⛏ Шахта",      callback_data="mine"),
     )
     # Ряд 4 — 2 кнопки
     builder.row(
-        KeyboardButton(text="📌 О проекте"),
-        KeyboardButton(text="📖 Инструкция"),
+        InlineKeyboardButton(text="📌 О проекте", callback_data="about"),
+        InlineKeyboardButton(text="📖 Инструкция",callback_data="instruction"),
     )
 
-    return builder.as_markup(resize_keyboard=True)
+    return builder.as_markup()
+
+
+def back_keyboard() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text="◀️ Назад", callback_data="main_menu")
+    return builder.as_markup()
 
 
 # ─────────────────────────────────────────
 #  Тексты разделов
 # ─────────────────────────────────────────
 SECTIONS = {
-    "👤 Профиль": (
+    "profile": (
         "👤 <b>Профиль</b>",
         "━━━━━━━━━━━━━━━━━━━━\n"
         "🆔 ID: <code>123456789</code>\n"
@@ -55,7 +61,7 @@ SECTIONS = {
         "📅 Дата регистрации: <b>04.03.2026</b>\n"
         "━━━━━━━━━━━━━━━━━━━━"
     ),
-    "👥 Рефералы": (
+    "referrals": (
         "👥 <b>Рефералы</b>",
         "━━━━━━━━━━━━━━━━━━━━\n"
         "Приглашайте друзей и получайте бонусы!\n\n"
@@ -65,7 +71,7 @@ SECTIONS = {
         "<code>https://t.me/YourBot?start=ref_123</code>\n"
         "━━━━━━━━━━━━━━━━━━━━"
     ),
-    "🎮 Игры": (
+    "games": (
         "🎮 <b>Игры</b>",
         "━━━━━━━━━━━━━━━━━━━━\n"
         "Выбирайте игру и испытайте удачу!\n\n"
@@ -74,7 +80,7 @@ SECTIONS = {
         "🎰 Слоты — сорви джекпот\n"
         "━━━━━━━━━━━━━━━━━━━━"
     ),
-    "🏆 Лидеры": (
+    "leaders": (
         "🏆 <b>Таблица лидеров</b>",
         "━━━━━━━━━━━━━━━━━━━━\n"
         "🥇 Player1 — <b>10 000 монет</b>\n"
@@ -84,7 +90,7 @@ SECTIONS = {
         "5️⃣  Player5 — <b>3 800 монет</b>\n"
         "━━━━━━━━━━━━━━━━━━━━"
     ),
-    "💹 Биржа": (
+    "exchange": (
         "💹 <b>Биржа</b>",
         "━━━━━━━━━━━━━━━━━━━━\n"
         "Обменивайте валюту и торгуйте активами!\n\n"
@@ -92,7 +98,7 @@ SECTIONS = {
         "📊 Объём за 24ч: <b>125 000 монет</b>\n"
         "━━━━━━━━━━━━━━━━━━━━"
     ),
-    "🎁 Бонус": (
+    "bonus": (
         "🎁 <b>Ежедневный бонус</b>",
         "━━━━━━━━━━━━━━━━━━━━\n"
         "Забирайте награду раз в 24 часа!\n\n"
@@ -100,7 +106,7 @@ SECTIONS = {
         "⏳ Следующий бонус через: <b>24:00:00</b>\n"
         "━━━━━━━━━━━━━━━━━━━━"
     ),
-    "🎟 Промокоды": (
+    "promocodes": (
         "🎟 <b>Промокоды</b>",
         "━━━━━━━━━━━━━━━━━━━━\n"
         "Введите промокод и получите вознаграждение!\n\n"
@@ -108,7 +114,7 @@ SECTIONS = {
         "<code>PROMO2026</code>\n"
         "━━━━━━━━━━━━━━━━━━━━"
     ),
-    "⛏ Шахта": (
+    "mine": (
         "⛏ <b>Шахта</b>",
         "━━━━━━━━━━━━━━━━━━━━\n"
         "Добывайте ресурсы и прокачивайте шахту!\n\n"
@@ -118,7 +124,7 @@ SECTIONS = {
         "⏱ Следующий сбор: <b>через 12:00:00</b>\n"
         "━━━━━━━━━━━━━━━━━━━━"
     ),
-    "📌 О проекте": (
+    "about": (
         "📌 <b>О проекте</b>",
         "━━━━━━━━━━━━━━━━━━━━\n"
         "Мы — команда энтузиастов, создавших уникальную игровую платформу.\n\n"
@@ -127,7 +133,7 @@ SECTIONS = {
         "💬 Поддержка: <b>@YourSupport</b>\n"
         "━━━━━━━━━━━━━━━━━━━━"
     ),
-    "📖 Инструкция": (
+    "instruction": (
         "📖 <b>Инструкция</b>",
         "━━━━━━━━━━━━━━━━━━━━\n"
         "1️⃣ Запустите бота через /start\n"
@@ -140,30 +146,49 @@ SECTIONS = {
     ),
 }
 
+MAIN_TEXT = (
+    "👋 <b>Добро пожаловать!</b>\n\n"
+    "🚀 Выберите раздел в меню ниже:"
+)
+
 
 # ─────────────────────────────────────────
-#  /start
+#  /start — отправляет единственное сообщение
 # ─────────────────────────────────────────
 @dp.message(CommandStart())
 async def cmd_start(message: Message):
     await message.answer(
-        "👋 <b>Добро пожаловать!</b>\n\n"
-        "🚀 Выберите раздел в меню ниже:",
+        MAIN_TEXT,
         reply_markup=main_menu_keyboard(),
         parse_mode="HTML",
     )
 
 
 # ─────────────────────────────────────────
-#  Обработчик всех кнопок меню
+#  Главное меню — редактирует текущее сообщение
 # ─────────────────────────────────────────
-@dp.message(F.text.in_(SECTIONS.keys()))
-async def section_handler(message: Message):
-    title, text = SECTIONS[message.text]
-    await message.answer(
-        f"{title}\n\n{text}",
+@dp.callback_query(F.data == "main_menu")
+async def cb_main_menu(call: CallbackQuery):
+    await call.message.edit_text(
+        MAIN_TEXT,
+        reply_markup=main_menu_keyboard(),
         parse_mode="HTML",
     )
+    await call.answer()
+
+
+# ─────────────────────────────────────────
+#  Разделы — редактируют то же сообщение
+# ─────────────────────────────────────────
+@dp.callback_query(F.data.in_(SECTIONS.keys()))
+async def cb_section(call: CallbackQuery):
+    title, text = SECTIONS[call.data]
+    await call.message.edit_text(
+        f"{title}\n\n{text}",
+        reply_markup=back_keyboard(),
+        parse_mode="HTML",
+    )
+    await call.answer()
 
 
 # ─────────────────────────────────────────
