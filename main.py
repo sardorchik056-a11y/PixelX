@@ -9,7 +9,7 @@ from aiogram.client.default import DefaultBotProperties
 BOT_TOKEN = "8586332532:AAHX758cf6iOUpPNpY2sqseGBYsKJo9js4U"
 
 # ─────────────────────────────────────────
-#  Custom Emoji IDs (из вашего main.py)
+#  Custom Emoji IDs — только из вашего main.py
 # ─────────────────────────────────────────
 EMOJI_PROFILE    = "5906581476639513176"
 EMOJI_PARTNERS   = "5906986955911993888"
@@ -21,18 +21,19 @@ EMOJI_INSTRUCT   = "5334544901428229844"
 EMOJI_BACK       = "5906771962734057347"
 EMOJI_WALLET     = "5443127283898405358"
 EMOJI_WITHDRAWAL = "5445355530111437729"
-EMOJI_BONUS      = "5443127283898405358"
 EMOJI_MINES      = "5307996024738395492"
 EMOJI_GOLD       = "5278467510604160626"
+EMOJI_STATS      = "5197288647275071607"
+EMOJI_CRYPTOBOT  = "5427054176246991778"
+EMOJI_DEVELOPMENT= "5445355530111437729"
+EMOJI_WELCOME    = "5199885118214255386"
+EMOJI_PEREXOD    = "5906839307821259375"
 
-bot = Bot(
-    token=BOT_TOKEN,
-    default=DefaultBotProperties(parse_mode=ParseMode.HTML)
-)
-dp = Dispatcher()
+bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+dp  = Dispatcher()
 
 # ─────────────────────────────────────────
-#  Простая in-memory БД
+#  In-memory БД
 # ─────────────────────────────────────────
 USERS_DB: dict[int, dict] = {}
 
@@ -42,32 +43,31 @@ def get_or_create_user(user) -> dict:
         USERS_DB[uid] = {
             "id": uid,
             "first_name": user.first_name or "",
-            "last_name": user.last_name or "",
-            "username": user.username or "",
-            "balance": 0.0,
-            "px": 0,
+            "last_name":  user.last_name  or "",
+            "username":   user.username   or "",
+            "balance":    0.0,
+            "px":         0,
             "registered_at": datetime.now(),
         }
     else:
         USERS_DB[uid]["first_name"] = user.first_name or ""
-        USERS_DB[uid]["last_name"]  = user.last_name or ""
-        USERS_DB[uid]["username"]   = user.username or ""
+        USERS_DB[uid]["last_name"]  = user.last_name  or ""
+        USERS_DB[uid]["username"]   = user.username   or ""
     return USERS_DB[uid]
 
 def days_in_project(registered_at: datetime) -> int:
     return (datetime.now() - registered_at).days
 
 def days_label(n: int) -> str:
-    if 11 <= n % 100 <= 19:
-        return "дней"
+    if 11 <= n % 100 <= 19: return "дней"
     r = n % 10
-    if r == 1:   return "день"
-    if r in (2, 3, 4): return "дня"
+    if r == 1:          return "день"
+    if r in (2, 3, 4):  return "дня"
     return "дней"
 
 
 # ─────────────────────────────────────────
-#  Клавиатуры — через icon_custom_emoji_id
+#  Клавиатуры
 # ─────────────────────────────────────────
 def main_menu_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
@@ -81,7 +81,7 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="Биржа",     callback_data="exchange",   icon_custom_emoji_id=EMOJI_WALLET),
         ],
         [
-            InlineKeyboardButton(text="Бонус",     callback_data="bonus",      icon_custom_emoji_id=EMOJI_BONUS),
+            InlineKeyboardButton(text="Бонус",     callback_data="bonus",      icon_custom_emoji_id=EMOJI_WALLET),
             InlineKeyboardButton(text="Промокоды", callback_data="promocodes", icon_custom_emoji_id=EMOJI_PROMO),
             InlineKeyboardButton(text="Шахта",     callback_data="mine",       icon_custom_emoji_id=EMOJI_MINES),
         ],
@@ -99,8 +99,8 @@ def back_keyboard() -> InlineKeyboardMarkup:
 def profile_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text="Пополнить", callback_data="deposit",  icon_custom_emoji_id=EMOJI_WALLET),
-            InlineKeyboardButton(text="Вывести",   callback_data="withdraw", icon_custom_emoji_id=EMOJI_WITHDRAWAL),
+            InlineKeyboardButton(text="Статистика", callback_data="stats",   icon_custom_emoji_id=EMOJI_STATS),
+            InlineKeyboardButton(text="Купить Px",  callback_data="buy_px",  icon_custom_emoji_id=EMOJI_GOLD),
         ],
         [
             InlineKeyboardButton(text="Назад", callback_data="main_menu", icon_custom_emoji_id=EMOJI_BACK)
@@ -112,36 +112,69 @@ def profile_keyboard() -> InlineKeyboardMarkup:
 #  Тексты
 # ─────────────────────────────────────────
 MAIN_TEXT = (
-    f'<blockquote><b>👋 Добро пожаловать!</b></blockquote>\n\n'
-    f'<blockquote>🚀 Выберите раздел в меню ниже</blockquote>'
+    f'<blockquote>'
+    f'<tg-emoji emoji-id="{EMOJI_WELCOME}">👋</tg-emoji> <b>Добро пожаловать!</b>\n\n'
+    f'🚀 Выберите раздел в меню ниже'
+    f'</blockquote>'
 )
 
 def build_profile_text(user: dict) -> str:
-    days     = days_in_project(user["registered_at"])
-    label    = days_label(days)
-    name     = f"{user['first_name']} {user['last_name']}".strip() or "—"
-    username = f"@{user['username']}" if user["username"] else "—"
-    reg_date = user["registered_at"].strftime("%d.%m.%Y")
-    balance  = user["balance"]
-    px       = user["px"]
+    days    = days_in_project(user["registered_at"])
+    label   = days_label(days)
+    name    = f"{user['first_name']} {user['last_name']}".strip() or "—"
+    uname   = f"@{user['username']}" if user["username"] else "—"
+    reg     = user["registered_at"].strftime("%d.%m.%Y")
+    balance = user["balance"]
+    px      = user["px"]
 
     return (
         f'<tg-emoji emoji-id="{EMOJI_PROFILE}">👤</tg-emoji> <b>Профиль</b>\n\n'
         f'<blockquote>'
         f'🪪  <b>Имя:</b> {name}\n'
-        f'📎  <b>Username:</b> {username}\n'
+        f'📎  <b>Username:</b> {uname}\n'
         f'🆔  <b>ID:</b> <code>{user["id"]}</code>'
         f'</blockquote>\n\n'
         f'<blockquote>'
         f'<tg-emoji emoji-id="{EMOJI_WALLET}">💰</tg-emoji>  <b>Баланс:</b> <code>{balance:,.2f}</code>\n'
-        f'⚡  <b>Px:</b> <code>{px} Px</code>'
+        f'<tg-emoji emoji-id="{EMOJI_GOLD}">⚡</tg-emoji>  <b>Px:</b> <code>{px} Px</code>'
         f'</blockquote>\n\n'
         f'<blockquote>'
-        f'📅  <b>В проекте с:</b> {reg_date}\n'
+        f'📅  <b>В проекте с:</b> {reg}\n'
         f'🗓  <b>Дней в проекте:</b> <code>{days} {label}</code>'
         f'</blockquote>'
     )
 
+def build_stats_text(user: dict) -> str:
+    days  = days_in_project(user["registered_at"])
+    label = days_label(days)
+    return (
+        f'<tg-emoji emoji-id="{EMOJI_STATS}">📊</tg-emoji> <b>Статистика</b>\n\n'
+        f'<blockquote>'
+        f'🆔  <b>ID:</b> <code>{user["id"]}</code>\n'
+        f'🗓  <b>Дней в проекте:</b> <code>{days} {label}</code>\n'
+        f'<tg-emoji emoji-id="{EMOJI_GOLD}">⚡</tg-emoji>  <b>Px:</b> <code>{user["px"]} Px</code>'
+        f'</blockquote>\n\n'
+        f'<blockquote>'
+        f'🎮  <b>Игр сыграно:</b> <code>0</code>\n'
+        f'🏆  <b>Побед:</b> <code>0</code>\n'
+        f'💸  <b>Выиграно всего:</b> <code>0.00</code>\n'
+        f'📉  <b>Проиграно всего:</b> <code>0.00</code>'
+        f'</blockquote>'
+    )
+
+def build_buy_px_text() -> str:
+    return (
+        f'<tg-emoji emoji-id="{EMOJI_GOLD}">⚡</tg-emoji> <b>Купить Px</b>\n\n'
+        f'<blockquote>'
+        f'Px — внутренняя валюта проекта.\n'
+        f'Используется для повышения уровня и привилегий.'
+        f'</blockquote>\n\n'
+        f'<blockquote>'
+        f'💎  <b>100 Px</b> — <code>1.00</code> <tg-emoji emoji-id="{EMOJI_CRYPTOBOT}">🔵</tg-emoji>\n'
+        f'💎  <b>500 Px</b> — <code>4.50</code> <tg-emoji emoji-id="{EMOJI_CRYPTOBOT}">🔵</tg-emoji>\n'
+        f'💎  <b>1000 Px</b> — <code>8.00</code> <tg-emoji emoji-id="{EMOJI_CRYPTOBOT}">🔵</tg-emoji>'
+        f'</blockquote>'
+    )
 
 SECTIONS: dict[str, tuple[str, str]] = {
     "referrals": (
@@ -157,13 +190,16 @@ SECTIONS: dict[str, tuple[str, str]] = {
     ),
     "games": (
         f'<tg-emoji emoji-id="{EMOJI_GAMES}">🎮</tg-emoji> <b>Игры</b>',
-        '<blockquote>'
-        '🎲  Кости — угадай число\n'
-        '🃏  Карты — 21 очко\n'
-        '🎰  Слоты — сорви джекпот\n'
+        f'<blockquote>'
+        f'🎲  Кости\n'
+        f'🏀  Баскетбол\n'
+        f'⚽  Футбол\n'
+        f'🎯  Дартс\n'
+        f'🎳  Боулинг\n'
         f'<tg-emoji emoji-id="{EMOJI_MINES}">💣</tg-emoji>  Мины\n'
+        f'🏰  Башня\n'
         f'<tg-emoji emoji-id="{EMOJI_GOLD}">🥇</tg-emoji>  Золото'
-        '</blockquote>'
+        f'</blockquote>'
     ),
     "leaders": (
         f'<tg-emoji emoji-id="{EMOJI_LEADERS}">🏆</tg-emoji> <b>Таблица лидеров</b>',
@@ -183,7 +219,7 @@ SECTIONS: dict[str, tuple[str, str]] = {
         '</blockquote>'
     ),
     "bonus": (
-        f'<tg-emoji emoji-id="{EMOJI_BONUS}">🎁</tg-emoji> <b>Ежедневный бонус</b>',
+        f'<tg-emoji emoji-id="{EMOJI_WALLET}">🎁</tg-emoji> <b>Ежедневный бонус</b>',
         '<blockquote>'
         '🎁  Награда: <b>50 монет</b>\n'
         '⏳  Следующий бонус через: <b>24:00:00</b>'
@@ -249,14 +285,23 @@ async def cb_profile(call: CallbackQuery):
     await call.answer()
 
 
-@dp.callback_query(F.data == "deposit")
-async def cb_deposit(call: CallbackQuery):
-    await call.answer("💳 Раздел пополнения — подключите вашу платёжную систему", show_alert=True)
+@dp.callback_query(F.data == "stats")
+async def cb_stats(call: CallbackQuery):
+    user = get_or_create_user(call.from_user)
+    back = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="Назад", callback_data="profile", icon_custom_emoji_id=EMOJI_BACK)
+    ]])
+    await call.message.edit_text(build_stats_text(user), reply_markup=back)
+    await call.answer()
 
 
-@dp.callback_query(F.data == "withdraw")
-async def cb_withdraw(call: CallbackQuery):
-    await call.answer("💸 Раздел вывода — подключите вашу платёжную систему", show_alert=True)
+@dp.callback_query(F.data == "buy_px")
+async def cb_buy_px(call: CallbackQuery):
+    back = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="Назад", callback_data="profile", icon_custom_emoji_id=EMOJI_BACK)
+    ]])
+    await call.message.edit_text(build_buy_px_text(), reply_markup=back)
+    await call.answer()
 
 
 @dp.callback_query(F.data.in_(SECTIONS.keys()))
