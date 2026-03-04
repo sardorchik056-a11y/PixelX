@@ -1,8 +1,8 @@
 import asyncio
 from aiogram import Bot, Dispatcher, F
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.filters import CommandStart, Command
-from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
+from aiogram.filters import CommandStart
+from aiogram.utils.keyboard import ReplyKeyboardBuilder
 
 BOT_TOKEN = "8545314102:AAGMDpkutDPoqPuIMcjMawQMCKHQgnXWPho"
 
@@ -11,36 +11,134 @@ dp = Dispatcher()
 
 
 # ─────────────────────────────────────────
-#  Главное меню
+#  Клавиатура главного меню
 # ─────────────────────────────────────────
-def main_menu_keyboard() -> InlineKeyboardMarkup:
-    builder = InlineKeyboardBuilder()
+def main_menu_keyboard() -> ReplyKeyboardMarkup:
+    builder = ReplyKeyboardBuilder()
 
-    buttons = [
-        ("👤 Профиль",     "profile"),
-        ("👥 Рефералы",    "referrals"),
-        ("🎮 Игры",        "games"),
-        ("🏆 Лидеры",      "leaders"),
-        ("💹 Биржа",       "exchange"),
-        ("🎁 Бонус",       "bonus"),
-        ("🎟 Промокоды",   "promocodes"),
-        ("📌 О проекте",   "about"),
-        ("📖 Инструкция",  "instruction"),
-        ("⛏ Шахта",       "mine"),
-    ]
+    # Ряд 1 — 3 кнопки
+    builder.row(
+        KeyboardButton(text="👤 Профиль"),
+        KeyboardButton(text="👥 Рефералы"),
+        KeyboardButton(text="🎮 Игры"),
+    )
+    # Ряд 2 — 2 кнопки
+    builder.row(
+        KeyboardButton(text="🏆 Лидеры"),
+        KeyboardButton(text="💹 Биржа"),
+    )
+    # Ряд 3 — 3 кнопки
+    builder.row(
+        KeyboardButton(text="🎁 Бонус"),
+        KeyboardButton(text="🎟 Промокоды"),
+        KeyboardButton(text="⛏ Шахта"),
+    )
+    # Ряд 4 — 2 кнопки
+    builder.row(
+        KeyboardButton(text="📌 О проекте"),
+        KeyboardButton(text="📖 Инструкция"),
+    )
 
-    for text, callback in buttons:
-        builder.button(text=text, callback_data=callback)
-
-    # Расположение: 2 кнопки в ряд, последняя — по центру
-    builder.adjust(2)
-    return builder.as_markup()
+    return builder.as_markup(resize_keyboard=True)
 
 
-def back_keyboard() -> InlineKeyboardMarkup:
-    builder = InlineKeyboardBuilder()
-    builder.button(text="◀️ Назад в меню", callback_data="main_menu")
-    return builder.as_markup()
+# ─────────────────────────────────────────
+#  Тексты разделов
+# ─────────────────────────────────────────
+SECTIONS = {
+    "👤 Профиль": (
+        "👤 <b>Профиль</b>",
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "🆔 ID: <code>123456789</code>\n"
+        "💰 Баланс: <b>0 монет</b>\n"
+        "⭐️ Уровень: <b>1</b>\n"
+        "📅 Дата регистрации: <b>04.03.2026</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━"
+    ),
+    "👥 Рефералы": (
+        "👥 <b>Рефералы</b>",
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "Приглашайте друзей и получайте бонусы!\n\n"
+        "👫 Приглашено: <b>0 чел.</b>\n"
+        "💎 Заработано: <b>0 монет</b>\n\n"
+        "🔗 Ваша ссылка:\n"
+        "<code>https://t.me/YourBot?start=ref_123</code>\n"
+        "━━━━━━━━━━━━━━━━━━━━"
+    ),
+    "🎮 Игры": (
+        "🎮 <b>Игры</b>",
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "Выбирайте игру и испытайте удачу!\n\n"
+        "🎲 Кости — угадай число\n"
+        "🃏 Карты — 21 очко\n"
+        "🎰 Слоты — сорви джекпот\n"
+        "━━━━━━━━━━━━━━━━━━━━"
+    ),
+    "🏆 Лидеры": (
+        "🏆 <b>Таблица лидеров</b>",
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "🥇 Player1 — <b>10 000 монет</b>\n"
+        "🥈 Player2 — <b>8 500 монет</b>\n"
+        "🥉 Player3 — <b>7 200 монет</b>\n"
+        "4️⃣  Player4 — <b>5 100 монет</b>\n"
+        "5️⃣  Player5 — <b>3 800 монет</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━"
+    ),
+    "💹 Биржа": (
+        "💹 <b>Биржа</b>",
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "Обменивайте валюту и торгуйте активами!\n\n"
+        "📈 Курс: <b>1 USD = 100 монет</b>\n"
+        "📊 Объём за 24ч: <b>125 000 монет</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━"
+    ),
+    "🎁 Бонус": (
+        "🎁 <b>Ежедневный бонус</b>",
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "Забирайте награду раз в 24 часа!\n\n"
+        "🎁 Награда: <b>50 монет</b>\n"
+        "⏳ Следующий бонус через: <b>24:00:00</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━"
+    ),
+    "🎟 Промокоды": (
+        "🎟 <b>Промокоды</b>",
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "Введите промокод и получите вознаграждение!\n\n"
+        "✏️ Напишите код в чат, например:\n"
+        "<code>PROMO2026</code>\n"
+        "━━━━━━━━━━━━━━━━━━━━"
+    ),
+    "⛏ Шахта": (
+        "⛏ <b>Шахта</b>",
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "Добывайте ресурсы и прокачивайте шахту!\n\n"
+        "⚡ Мощность: <b>100 ед/ч</b>\n"
+        "💰 Накоплено: <b>0 монет</b>\n"
+        "🔧 Уровень шахты: <b>1</b>\n"
+        "⏱ Следующий сбор: <b>через 12:00:00</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━"
+    ),
+    "📌 О проекте": (
+        "📌 <b>О проекте</b>",
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "Мы — команда энтузиастов, создавших уникальную игровую платформу.\n\n"
+        "🌐 Сайт: <b>example.com</b>\n"
+        "📢 Канал: <b>@YourChannel</b>\n"
+        "💬 Поддержка: <b>@YourSupport</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━"
+    ),
+    "📖 Инструкция": (
+        "📖 <b>Инструкция</b>",
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "1️⃣ Запустите бота через /start\n"
+        "2️⃣ Пополните баланс на бирже\n"
+        "3️⃣ Участвуйте в играх и зарабатывайте\n"
+        "4️⃣ Добывайте ресурсы в шахте\n"
+        "5️⃣ Приглашайте друзей за рефбонусы\n"
+        "6️⃣ Следите за таблицей лидеров\n"
+        "━━━━━━━━━━━━━━━━━━━━"
+    ),
+}
 
 
 # ─────────────────────────────────────────
@@ -49,86 +147,21 @@ def back_keyboard() -> InlineKeyboardMarkup:
 @dp.message(CommandStart())
 async def cmd_start(message: Message):
     await message.answer(
-        "👋 <b>Добро пожаловать!</b>\n\nВыберите раздел:",
+        "👋 <b>Добро пожаловать!</b>\n\n"
+        "🚀 Выберите раздел в меню ниже:",
         reply_markup=main_menu_keyboard(),
         parse_mode="HTML",
     )
 
 
 # ─────────────────────────────────────────
-#  Возврат в главное меню
+#  Обработчик всех кнопок меню
 # ─────────────────────────────────────────
-@dp.callback_query(F.data == "main_menu")
-async def back_to_menu(call: CallbackQuery):
-    await call.message.edit_text(
-        "👋 <b>Главное меню</b>\n\nВыберите раздел:",
-        reply_markup=main_menu_keyboard(),
-        parse_mode="HTML",
-    )
-
-
-# ─────────────────────────────────────────
-#  Обработчики разделов
-# ─────────────────────────────────────────
-SECTIONS = {
-    "profile": (
-        "👤 <b>Профиль</b>",
-        "Здесь отображается информация о вашем аккаунте: баланс, статистика и настройки.",
-    ),
-    "referrals": (
-        "👥 <b>Рефералы</b>",
-        "Приглашайте друзей и получайте бонусы за каждого реферала!\n\n"
-        "Ваша реферальная ссылка: <code>https://t.me/YourBot?start=ref_ID</code>",
-    ),
-    "games": (
-        "🎮 <b>Игры</b>",
-        "Выбирайте игру и испытайте удачу!\n\n• 🎲 Кости\n• 🃏 Карты\n• 🎰 Слоты",
-    ),
-    "leaders": (
-        "🏆 <b>Таблица лидеров</b>",
-        "Топ игроков по балансу и активности.\n\n🥇 Player1 — 10 000 монет\n🥈 Player2 — 8 500 монет\n🥉 Player3 — 7 200 монет",
-    ),
-    "exchange": (
-        "💹 <b>Биржа</b>",
-        "Обменивайте внутреннюю валюту, торгуйте активами и следите за курсами.",
-    ),
-    "bonus": (
-        "🎁 <b>Бонус</b>",
-        "Ежедневный бонус доступен раз в 24 часа.\n\nНажмите кнопку ниже, чтобы забрать награду!",
-    ),
-    "promocodes": (
-        "🎟 <b>Промокоды</b>",
-        "Введите промокод и получите вознаграждение.\n\n<i>Пример: PROMO2025</i>",
-    ),
-    "about": (
-        "📌 <b>О проекте</b>",
-        "Мы — команда энтузиастов, создавших уникальную платформу.\n\n"
-        "🌐 Сайт: example.com\n📢 Канал: @YourChannel",
-    ),
-    "instruction": (
-        "📖 <b>Инструкция</b>",
-        "1️⃣ Зарегистрируйтесь через /start\n"
-        "2️⃣ Пополните баланс на бирже\n"
-        "3️⃣ Участвуйте в играх и зарабатывайте\n"
-        "4️⃣ Приглашайте друзей за бонусы\n"
-        "5️⃣ Следите за таблицей лидеров",
-    ),
-    "mine": (
-        "⛏ <b>Шахта</b>",
-        "Добывайте ресурсы и прокачивайте шахту!\n\n"
-        "⚡ Мощность: 100 ед/ч\n💰 Баланс шахты: 0 монет\n\n"
-        "<i>Следующий сбор через: 12:00:00</i>",
-    ),
-}
-
-
-@dp.callback_query(F.data.in_(SECTIONS.keys()))
-async def section_handler(call: CallbackQuery):
-    section = call.data
-    title, text = SECTIONS[section]
-    await call.message.edit_text(
+@dp.message(F.text.in_(SECTIONS.keys()))
+async def section_handler(message: Message):
+    title, text = SECTIONS[message.text]
+    await message.answer(
         f"{title}\n\n{text}",
-        reply_markup=back_keyboard(),
         parse_mode="HTML",
     )
 
@@ -137,7 +170,7 @@ async def section_handler(call: CallbackQuery):
 #  Запуск
 # ─────────────────────────────────────────
 async def main():
-    print("Бот запущен...")
+    print("✅ Бот запущен!")
     await dp.start_polling(bot)
 
 
