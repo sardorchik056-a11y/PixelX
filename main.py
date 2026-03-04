@@ -22,7 +22,7 @@ EMOJI_BACK        = "5906771962734057347"
 EMOJI_WALLET      = "5443127283898405358"
 EMOJI_MINES       = "5307996024738395492"
 EMOJI_GOLD        = "5278467510604160626"
-EMOJI_STATS       = "5197288647275071607"
+EMOJI_STATS       = "5231200819986047254"
 EMOJI_DEVELOPMENT = "5445355530111437729"
 EMOJI_WELCOME     = "5199885118214255386"
 
@@ -145,16 +145,16 @@ def build_profile_text(user: dict) -> str:
     return (
         f'<tg-emoji emoji-id="{EMOJI_PROFILE}">👤</tg-emoji> <b>Профиль</b>\n\n'
         f'<blockquote>'
-        f'🪪  <b>Имя:</b> {name}\n'
-        f'📎  <b>Username:</b> {uname}\n'
+        f'<tg-emoji emoji-id="5201691993775818138">⚡</tg-emoji>  <b>Имя:</b> {name}\n'
+        f'<tg-emoji emoji-id="5445353829304387411">⚡</tg-emoji>  <b>Username:</b> {uname}\n'
         f'🆔  <b>ID:</b> <code>{user["id"]}</code>'
         f'</blockquote>\n\n'
         f'<blockquote>'
         f'<tg-emoji emoji-id="{EMOJI_GOLD}">⚡</tg-emoji>  <b>Баланс:</b> <code>{user["px"]} Px</code>'
         f'</blockquote>\n\n'
         f'<blockquote>'
-        f'📅  <b>В проекте с:</b> {reg}\n'
-        f'🗓  <b>Дней в проекте:</b> <code>{days} {label}</code>'
+        f'<tg-emoji emoji-id="5906909964328245730">⚡</tg-emoji>  <b>В проекте с:</b> {reg}\n'
+        f'<tg-emoji emoji-id="5274055917766202507">⚡</tg-emoji>  <b>Дней в проекте:</b> <code>{days} {label}</code>'
         f'</blockquote>'
     )
 
@@ -168,9 +168,9 @@ def build_stats_text(user: dict) -> str:
         f'🆔  <b>ID:</b> <code>{user["id"]}</code>\n'
         f'<tg-emoji emoji-id="{EMOJI_GOLD}">⚡</tg-emoji>  <b>Баланс:</b> <code>{user["px"]} Px</code>\n'
         f'🎮  <b>Сыграно игр:</b> <code>{user["games_played"]}</code>\n'
-        f'✅  <b>Выиграно всего:</b> <code>{user["total_won"]:,.2f}</code>\n'
-        f'❌  <b>Проиграно всего:</b> <code>{user["total_lost"]:,.2f}</code>\n'
-        f'🗓  <b>Дней в проекте:</b> <code>{days} {label}</code>'
+        f'<tg-emoji emoji-id="5429651785352501917">⚡</tg-emoji>  <b>Выиграно всего:</b> <code>{user["total_won"]:,.2f}</code>\n'
+        f'<tg-emoji emoji-id="5429518319243775957">⚡</tg-emoji>  <b>Проиграно всего:</b> <code>{user["total_lost"]:,.2f}</code>\n'
+        f'<tg-emoji emoji-id="5274055917766202507">⚡</tg-emoji>  <b>Дней в проекте:</b> <code>{days} {label}</code>'
         f'</blockquote>'
     )
 
