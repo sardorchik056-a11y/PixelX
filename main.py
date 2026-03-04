@@ -93,7 +93,6 @@ def inject_to_modules(bot: Bot):
     _mine_module.get_px_fn    = get_px
     _mine_module.add_px_fn    = add_px
     _mine_module.spend_px_fn  = spend_px
-    _mine_module._bot_ref     = bot  # для авто-обновления прогресса
 
 
 # ─────────────────────────────────────────
