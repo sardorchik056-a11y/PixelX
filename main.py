@@ -6,14 +6,13 @@ from aiogram.filters import CommandStart
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 
-# ── Импорт модуля шахты ──
 import mine as _mine_module
 from mine import mine_router, mine_watchdog
 
 BOT_TOKEN = "8586332532:AAHX758cf6iOUpPNpY2sqseGBYsKJo9js4U"
 
 # ─────────────────────────────────────────
-#  Custom Emoji IDs
+#  Emoji IDs
 # ─────────────────────────────────────────
 EMOJI_PROFILE     = "5906581476639513176"
 EMOJI_PARTNERS    = "5906986955911993888"
@@ -31,7 +30,7 @@ EMOJI_DEVELOPMENT = "5445355530111437729"
 EMOJI_WELCOME     = "5199885118214255386"
 
 # ─────────────────────────────────────────
-#  In-memory БД пользователей
+#  БД пользователей
 # ─────────────────────────────────────────
 USERS_DB: dict[int, dict] = {}
 
@@ -55,7 +54,7 @@ def get_or_create_user(user) -> dict:
         USERS_DB[uid]["username"]   = user.username   or ""
     return USERS_DB[uid]
 
-def get_px(uid: int) -> int:
+def get_px(uid: int) -> float:
     return USERS_DB.get(uid, {}).get("px", 0)
 
 def add_px(uid: int, amount: float):
@@ -88,22 +87,22 @@ def is_owner(message_id: int, user_id: int) -> bool:
     owner = _msg_owners.get(message_id)
     return owner is None or owner == user_id
 
-def inject_to_modules():
-    """Инжектируем функции во все модули."""
+def inject_to_modules(bot: Bot):
     _mine_module.set_owner_fn = set_owner
     _mine_module.is_owner_fn  = is_owner
     _mine_module.get_px_fn    = get_px
     _mine_module.add_px_fn    = add_px
     _mine_module.spend_px_fn  = spend_px
+    _mine_module._bot_ref     = bot  # для авто-обновления прогресса
 
 
 # ─────────────────────────────────────────
-#  Bot + Dispatcher — роутер подключается ДО старта
+#  Bot + Dispatcher
 # ─────────────────────────────────────────
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp  = Dispatcher()
 
-# !! Подключаем mine_router здесь, на уровне модуля !!
+# Роутер подключается здесь — ДО старта
 dp.include_router(mine_router)
 
 
@@ -152,7 +151,6 @@ def profile_keyboard() -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="Назад", callback_data="main_menu", icon_custom_emoji_id=EMOJI_BACK)
         ],
     ])
-
 
 # ─────────────────────────────────────────
 #  Тексты
@@ -210,9 +208,8 @@ def build_stats_text(user: dict) -> str:
         f'</blockquote>'
     )
 
-
 # ─────────────────────────────────────────
-#  Разделы в разработке (без mine — он в mine_router)
+#  Разделы в разработке
 # ─────────────────────────────────────────
 DEV_SECTIONS = {
     "referrals":   "Рефералы",
@@ -225,7 +222,6 @@ DEV_SECTIONS = {
     "instruction": "Инструкция",
 }
 
-
 # ─────────────────────────────────────────
 #  Хэндлеры
 # ─────────────────────────────────────────
@@ -235,7 +231,6 @@ async def cmd_start(message: Message):
     sent = await message.answer(MAIN_TEXT, reply_markup=main_menu_keyboard())
     set_owner(sent.message_id, message.from_user.id)
 
-
 @dp.callback_query(F.data == "main_menu")
 async def cb_main_menu(call: CallbackQuery):
     if not is_owner(call.message.message_id, call.from_user.id):
@@ -243,7 +238,6 @@ async def cb_main_menu(call: CallbackQuery):
     await call.message.edit_text(MAIN_TEXT, reply_markup=main_menu_keyboard())
     set_owner(call.message.message_id, call.from_user.id)
     await call.answer()
-
 
 @dp.callback_query(F.data == "profile")
 async def cb_profile(call: CallbackQuery):
@@ -254,7 +248,6 @@ async def cb_profile(call: CallbackQuery):
     set_owner(call.message.message_id, call.from_user.id)
     await call.answer()
 
-
 @dp.callback_query(F.data == "stats")
 async def cb_stats(call: CallbackQuery):
     if not is_owner(call.message.message_id, call.from_user.id):
@@ -264,7 +257,6 @@ async def cb_stats(call: CallbackQuery):
     set_owner(call.message.message_id, call.from_user.id)
     await call.answer()
 
-
 @dp.callback_query(F.data == "buy_px")
 async def cb_buy_px(call: CallbackQuery):
     if not is_owner(call.message.message_id, call.from_user.id):
@@ -272,7 +264,6 @@ async def cb_buy_px(call: CallbackQuery):
     await call.message.edit_text(dev_text("Купить Px"), reply_markup=back_profile_keyboard())
     set_owner(call.message.message_id, call.from_user.id)
     await call.answer()
-
 
 @dp.callback_query(F.data.in_(DEV_SECTIONS.keys()))
 async def cb_dev_section(call: CallbackQuery):
@@ -282,12 +273,11 @@ async def cb_dev_section(call: CallbackQuery):
     set_owner(call.message.message_id, call.from_user.id)
     await call.answer()
 
-
 # ─────────────────────────────────────────
 #  Запуск
 # ─────────────────────────────────────────
 async def main():
-    inject_to_modules()
+    inject_to_modules(bot)
     asyncio.create_task(mine_watchdog())
     print("✅ Бот запущен!")
     await dp.start_polling(bot)
