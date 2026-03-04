@@ -6,10 +6,14 @@ from aiogram.filters import CommandStart
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 
+# ── Импорт модуля шахты ──
+import mine as _mine_module
+from mine import mine_router, mine_watchdog
+
 BOT_TOKEN = "8586332532:AAHX758cf6iOUpPNpY2sqseGBYsKJo9js4U"
 
 # ─────────────────────────────────────────
-#  Custom Emoji IDs — только из main.py
+#  Custom Emoji IDs
 # ─────────────────────────────────────────
 EMOJI_PROFILE     = "5906581476639513176"
 EMOJI_PARTNERS    = "5906986955911993888"
@@ -26,11 +30,8 @@ EMOJI_STATS       = "5231200819986047254"
 EMOJI_DEVELOPMENT = "5445355530111437729"
 EMOJI_WELCOME     = "5199885118214255386"
 
-bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
-dp  = Dispatcher()
-
 # ─────────────────────────────────────────
-#  In-memory БД
+#  In-memory БД пользователей
 # ─────────────────────────────────────────
 USERS_DB: dict[int, dict] = {}
 
@@ -54,6 +55,17 @@ def get_or_create_user(user) -> dict:
         USERS_DB[uid]["username"]   = user.username   or ""
     return USERS_DB[uid]
 
+def get_px(uid: int) -> int:
+    return USERS_DB.get(uid, {}).get("px", 0)
+
+def add_px(uid: int, amount: float):
+    if uid in USERS_DB:
+        USERS_DB[uid]["px"] = round(USERS_DB[uid].get("px", 0) + amount, 2)
+
+def spend_px(uid: int, amount: float):
+    if uid in USERS_DB:
+        USERS_DB[uid]["px"] = max(0, round(USERS_DB[uid].get("px", 0) - amount, 2))
+
 def days_in_project(registered_at: datetime) -> int:
     return (datetime.now() - registered_at).days
 
@@ -63,6 +75,36 @@ def days_label(n: int) -> str:
     if r == 1:         return "день"
     if r in (2, 3, 4): return "дня"
     return "дней"
+
+# ─────────────────────────────────────────
+#  Owner guard
+# ─────────────────────────────────────────
+_msg_owners: dict[int, int] = {}
+
+def set_owner(message_id: int, user_id: int):
+    _msg_owners[message_id] = user_id
+
+def is_owner(message_id: int, user_id: int) -> bool:
+    owner = _msg_owners.get(message_id)
+    return owner is None or owner == user_id
+
+def inject_to_modules():
+    """Инжектируем функции во все модули."""
+    _mine_module.set_owner_fn = set_owner
+    _mine_module.is_owner_fn  = is_owner
+    _mine_module.get_px_fn    = get_px
+    _mine_module.add_px_fn    = add_px
+    _mine_module.spend_px_fn  = spend_px
+
+
+# ─────────────────────────────────────────
+#  Bot + Dispatcher — роутер подключается ДО старта
+# ─────────────────────────────────────────
+bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+dp  = Dispatcher()
+
+# !! Подключаем mine_router здесь, на уровне модуля !!
+dp.include_router(mine_router)
 
 
 # ─────────────────────────────────────────
@@ -113,19 +155,6 @@ def profile_keyboard() -> InlineKeyboardMarkup:
 
 
 # ─────────────────────────────────────────
-#  Текст "В разработке"
-# ─────────────────────────────────────────
-def dev_text(section: str) -> str:
-    return (
-        f'<tg-emoji emoji-id="{EMOJI_DEVELOPMENT}">🔧</tg-emoji> <b>{section}</b>\n\n'
-        f'<blockquote>'
-        f'⚙️  Раздел находится в разработке.\n'
-        f'🚀  Скоро будет доступен!'
-        f'</blockquote>'
-    )
-
-
-# ─────────────────────────────────────────
 #  Тексты
 # ─────────────────────────────────────────
 MAIN_TEXT = (
@@ -135,13 +164,21 @@ MAIN_TEXT = (
     f'</blockquote>'
 )
 
+def dev_text(section: str) -> str:
+    return (
+        f'<tg-emoji emoji-id="{EMOJI_DEVELOPMENT}">🔧</tg-emoji> <b>{section}</b>\n\n'
+        f'<blockquote>'
+        f'⚙️  Раздел находится в разработке.\n'
+        f'🚀  Скоро будет доступен!'
+        f'</blockquote>'
+    )
+
 def build_profile_text(user: dict) -> str:
     days  = days_in_project(user["registered_at"])
     label = days_label(days)
     name  = f"{user['first_name']} {user['last_name']}".strip() or "—"
     uname = f"@{user['username']}" if user["username"] else "—"
     reg   = user["registered_at"].strftime("%d.%m.%Y")
-
     return (
         f'<tg-emoji emoji-id="{EMOJI_PROFILE}">👤</tg-emoji> <b>Профиль</b>\n\n'
         f'<blockquote>'
@@ -161,24 +198,21 @@ def build_profile_text(user: dict) -> str:
 def build_stats_text(user: dict) -> str:
     days  = days_in_project(user["registered_at"])
     label = days_label(days)
-
     return (
         f'<tg-emoji emoji-id="{EMOJI_STATS}">📊</tg-emoji> <b>Статистика</b>\n\n'
         f'<blockquote>'
         f'🆔  <b>ID:</b> <code>{user["id"]}</code>\n'
         f'<tg-emoji emoji-id="{EMOJI_GOLD}">⚡</tg-emoji>  <b>Баланс:</b> <code>{user["px"]} Px</code>\n'
-        f'<tg-emoji emoji-id="5274055917766202507">⚡</tg-emoji>  <b>Дней в проекте:</b> <code>{days} {label}</code>'
-        f'</blockquote>\n\n'
-        f'<blockquote>'
         f'<tg-emoji emoji-id="5400362079783770689">⚡</tg-emoji>  <b>Сыграно игр:</b> <code>{user["games_played"]}</code>\n'
         f'<tg-emoji emoji-id="5429651785352501917">⚡</tg-emoji>  <b>Выиграно всего:</b> <code>{user["total_won"]:,.2f}</code>\n'
         f'<tg-emoji emoji-id="5429518319243775957">⚡</tg-emoji>  <b>Проиграно всего:</b> <code>{user["total_lost"]:,.2f}</code>\n'
+        f'<tg-emoji emoji-id="5274055917766202507">⚡</tg-emoji>  <b>Дней в проекте:</b> <code>{days} {label}</code>'
         f'</blockquote>'
     )
 
 
 # ─────────────────────────────────────────
-#  Разделы в разработке
+#  Разделы в разработке (без mine — он в mine_router)
 # ─────────────────────────────────────────
 DEV_SECTIONS = {
     "referrals":   "Рефералы",
@@ -187,7 +221,6 @@ DEV_SECTIONS = {
     "exchange":    "Биржа",
     "bonus":       "Бонус",
     "promocodes":  "Промокоды",
-    "mine":        "Шахта",
     "about":       "О проекте",
     "instruction": "Инструкция",
 }
@@ -199,38 +232,54 @@ DEV_SECTIONS = {
 @dp.message(CommandStart())
 async def cmd_start(message: Message):
     get_or_create_user(message.from_user)
-    await message.answer(MAIN_TEXT, reply_markup=main_menu_keyboard())
+    sent = await message.answer(MAIN_TEXT, reply_markup=main_menu_keyboard())
+    set_owner(sent.message_id, message.from_user.id)
 
 
 @dp.callback_query(F.data == "main_menu")
 async def cb_main_menu(call: CallbackQuery):
+    if not is_owner(call.message.message_id, call.from_user.id):
+        await call.answer("🚫 Это не ваша кнопка!", show_alert=True); return
     await call.message.edit_text(MAIN_TEXT, reply_markup=main_menu_keyboard())
+    set_owner(call.message.message_id, call.from_user.id)
     await call.answer()
 
 
 @dp.callback_query(F.data == "profile")
 async def cb_profile(call: CallbackQuery):
+    if not is_owner(call.message.message_id, call.from_user.id):
+        await call.answer("🚫 Это не ваша кнопка!", show_alert=True); return
     user = get_or_create_user(call.from_user)
     await call.message.edit_text(build_profile_text(user), reply_markup=profile_keyboard())
+    set_owner(call.message.message_id, call.from_user.id)
     await call.answer()
 
 
 @dp.callback_query(F.data == "stats")
 async def cb_stats(call: CallbackQuery):
+    if not is_owner(call.message.message_id, call.from_user.id):
+        await call.answer("🚫 Это не ваша кнопка!", show_alert=True); return
     user = get_or_create_user(call.from_user)
     await call.message.edit_text(build_stats_text(user), reply_markup=back_profile_keyboard())
+    set_owner(call.message.message_id, call.from_user.id)
     await call.answer()
 
 
 @dp.callback_query(F.data == "buy_px")
 async def cb_buy_px(call: CallbackQuery):
+    if not is_owner(call.message.message_id, call.from_user.id):
+        await call.answer("🚫 Это не ваша кнопка!", show_alert=True); return
     await call.message.edit_text(dev_text("Купить Px"), reply_markup=back_profile_keyboard())
+    set_owner(call.message.message_id, call.from_user.id)
     await call.answer()
 
 
 @dp.callback_query(F.data.in_(DEV_SECTIONS.keys()))
 async def cb_dev_section(call: CallbackQuery):
+    if not is_owner(call.message.message_id, call.from_user.id):
+        await call.answer("🚫 Это не ваша кнопка!", show_alert=True); return
     await call.message.edit_text(dev_text(DEV_SECTIONS[call.data]), reply_markup=back_main_keyboard())
+    set_owner(call.message.message_id, call.from_user.id)
     await call.answer()
 
 
@@ -238,6 +287,8 @@ async def cb_dev_section(call: CallbackQuery):
 #  Запуск
 # ─────────────────────────────────────────
 async def main():
+    inject_to_modules()
+    asyncio.create_task(mine_watchdog())
     print("✅ Бот запущен!")
     await dp.start_polling(bot)
 
