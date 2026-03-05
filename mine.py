@@ -5,6 +5,8 @@ from aiogram import Router, F, Bot
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.exceptions import TelegramBadRequest
 
+from database import db_get_mine_user, db_save_mine_user
+
 # ─────────────────────────────────────────
 #  Инжектируемые функции из bot_menu.py
 # ─────────────────────────────────────────
@@ -60,11 +62,8 @@ PICKAXES = [
 PICKAXE_BY_ID = {p["id"]: p for p in PICKAXES}
 
 # ─────────────────────────────────────────
-#  In-memory БД шахты
+#  Bot ref + progress watchers
 # ─────────────────────────────────────────
-mine_data: dict[int, dict] = {}
-
-# FIX: объявлены, чтобы watchdog не падал с NameError
 _bot_ref: Bot | None = None
 progress_watchers: dict[int, tuple[int, int]] = {}  # uid -> (chat_id, msg_id)
 
@@ -73,18 +72,16 @@ def set_bot_ref(bot: Bot):
     _bot_ref = bot
 
 
+# ─────────────────────────────────────────
+#  Получение данных пользователя шахты
+# ─────────────────────────────────────────
 def get_mine_user(uid: int) -> dict:
-    if uid not in mine_data:
-        mine_data[uid] = {
-            "nox":          0.0,
-            "pickaxe_id":   1,
-            "owned":        {1},
-            "mining_start": None,
-            "mining_end":   None,
-            "ticks_paid":   0,
-            "accumulated":  0.0,
-        }
-    return mine_data[uid]
+    """Загружает данные из БД. Возвращает dict, изменения нужно сохранять через save_mine_user."""
+    return db_get_mine_user(uid)
+
+def save_mine_user(uid: int, data: dict):
+    """Сохраняет изменённый dict обратно в БД."""
+    db_save_mine_user(uid, data)
 
 
 # ─────────────────────────────────────────
@@ -208,6 +205,7 @@ def mine_main_text(uid: int) -> str:
 
     if is_done(data):
         finalize_mining(data, pickaxe)
+        save_mine_user(uid, data)
 
     nox_px       = round(data["nox"] * NOX_TO_PX, 2)
     max_ticks    = int(pickaxe["hours"] * 60 / TICK_MINUTES)
@@ -251,6 +249,7 @@ def progress_text(uid: int) -> str:
 
     if is_done(data):
         finalize_mining(data, pickaxe)
+        save_mine_user(uid, data)
         return (
             f'<tg-emoji emoji-id="5262844652964303985">⛏</tg-emoji> <b>Копание завершено!</b>\n\n'
             f'<blockquote>'
@@ -260,6 +259,7 @@ def progress_text(uid: int) -> str:
         )
 
     apply_new_ticks(data, pickaxe)
+    save_mine_user(uid, data)
 
     max_ticks  = int(pickaxe["hours"] * 60 / TICK_MINUTES)
     done_ticks = data["ticks_paid"]
@@ -297,6 +297,7 @@ async def cb_mine(call: CallbackQuery):
     data = get_mine_user(uid)
     if is_done(data):
         finalize_mining(data, PICKAXE_BY_ID[data["pickaxe_id"]])
+        save_mine_user(uid, data)
     await call.message.edit_text(
         mine_main_text(uid),
         reply_markup=mine_main_keyboard(data["mining_end"] is not None)
@@ -315,7 +316,6 @@ async def cb_mine_progress(call: CallbackQuery):
     if not data["mining_end"]:
         await call.answer("⛏ Копание не запущено!", show_alert=True); return
 
-    # FIX: регистрируем сообщение для авто-обновления watchdog'ом
     progress_watchers[uid] = (call.message.chat.id, call.message.message_id)
 
     await call.message.edit_text(progress_text(uid), reply_markup=progress_keyboard())
@@ -347,7 +347,6 @@ async def cb_mine_equip(call: CallbackQuery):
     if is_owner_fn and not is_owner_fn(call.message.message_id, call.from_user.id):
         await call.answer("🚫 Это не ваша кнопка!", show_alert=True); return
 
-    # FIX: безопасный парсинг callback_data
     parts = call.data.split("_")
     if len(parts) < 3 or not parts[2].isdigit():
         await call.answer("❌ Неверные данные!", show_alert=True); return
@@ -356,7 +355,8 @@ async def cb_mine_equip(call: CallbackQuery):
     if pid not in PICKAXE_BY_ID:
         await call.answer("❌ Кирка не найдена!", show_alert=True); return
 
-    data = get_mine_user(call.from_user.id)
+    uid  = call.from_user.id
+    data = get_mine_user(uid)
     if pid not in data["owned"]:
         await call.answer("❌ У вас нет этой кирки!", show_alert=True); return
     if data["mining_end"]:
@@ -368,6 +368,7 @@ async def cb_mine_equip(call: CallbackQuery):
     data["mining_end"]   = datetime.now() + timedelta(hours=pickaxe["hours"])
     data["ticks_paid"]   = 0
     data["accumulated"]  = 0.0
+    save_mine_user(uid, data)
 
     await call.message.edit_text(
         f'<tg-emoji emoji-id="5197371802136892976">⛏</tg-emoji> <b>Копание началось!</b>\n\n'
@@ -383,7 +384,7 @@ async def cb_mine_equip(call: CallbackQuery):
         reply_markup=back_mine_keyboard()
     )
     if set_owner_fn:
-        set_owner_fn(call.message.message_id, call.from_user.id)
+        set_owner_fn(call.message.message_id, uid)
     await call.answer("⛏ Копание запущено!")
 
 
@@ -417,12 +418,11 @@ async def cb_mine_shop(call: CallbackQuery):
     if is_owner_fn and not is_owner_fn(call.message.message_id, call.from_user.id):
         await call.answer("🚫 Это не ваша кнопка!", show_alert=True); return
 
-    # FIX: безопасный парсинг страницы
     parts = call.data.split("_")
     if len(parts) < 3 or not parts[2].isdigit():
         await call.answer("❌ Неверные данные!", show_alert=True); return
     page = int(parts[2])
-    page = max(0, min(page, (len(PICKAXES) - 1) // 5))  # клампинг страницы
+    page = max(0, min(page, (len(PICKAXES) - 1) // 5))
 
     data  = get_mine_user(call.from_user.id)
     tiers = {0: "1", 1: "2", 2: "3", 3: "4", 4: "5"}
@@ -451,7 +451,6 @@ async def cb_mine_buy(call: CallbackQuery):
     if is_owner_fn and not is_owner_fn(call.message.message_id, call.from_user.id):
         await call.answer("🚫 Это не ваша кнопка!", show_alert=True); return
 
-    # FIX: безопасный парсинг
     parts = call.data.split("_")
     if len(parts) < 3 or not parts[2].isdigit():
         await call.answer("❌ Неверные данные!", show_alert=True); return
@@ -477,6 +476,7 @@ async def cb_mine_buy(call: CallbackQuery):
         spend_px_fn(uid, pickaxe["price"])
 
     data["owned"].add(pid)
+    save_mine_user(uid, data)
     await call.answer(f'✅ Куплено: {pickaxe["name"]}!', show_alert=True)
 
     page  = (pid - 1) // 5
@@ -509,7 +509,6 @@ async def cb_mine_sell(call: CallbackQuery):
     if data["nox"] <= 0:
         await call.answer("❌ Нет Nox для продажи!", show_alert=True); return
 
-    # FIX: финализируем накопленное перед продажей, чтобы не терять текущий прогресс
     pickaxe = PICKAXE_BY_ID[data["pickaxe_id"]]
     if data["mining_end"]:
         apply_new_ticks(data, pickaxe)
@@ -521,6 +520,7 @@ async def cb_mine_sell(call: CallbackQuery):
     if add_px_fn:
         add_px_fn(uid, px_earned)
     data["nox"] = 0.0
+    save_mine_user(uid, data)
 
     await call.message.edit_text(
         f'<tg-emoji emoji-id="{EMOJI_GOLD}">💰</tg-emoji> <b>Продажа Nox</b>\n\n'
@@ -545,7 +545,16 @@ async def mine_watchdog():
         await asyncio.sleep(REFRESH_SECONDS)
         now = datetime.now()
 
-        for uid, data in list(mine_data.items()):
+        # Загружаем всех активных майнеров из БД
+        from database import get_conn
+        with get_conn() as conn:
+            rows = conn.execute(
+                "SELECT uid FROM mine WHERE mining_end IS NOT NULL"
+            ).fetchall()
+        active_uids = [r["uid"] for r in rows]
+
+        for uid in active_uids:
+            data    = get_mine_user(uid)
             if not data["mining_end"]:
                 continue
 
@@ -553,13 +562,13 @@ async def mine_watchdog():
 
             if now >= data["mining_end"]:
                 finalize_mining(data, pickaxe)
-                # FIX: чистим watcher после завершения
+                save_mine_user(uid, data)
                 progress_watchers.pop(uid, None)
                 continue
 
             apply_new_ticks(data, pickaxe)
+            save_mine_user(uid, data)
 
-            # FIX: _bot_ref и progress_watchers теперь определены, ошибки нет
             if uid in progress_watchers and _bot_ref:
                 chat_id, msg_id = progress_watchers[uid]
                 try:
