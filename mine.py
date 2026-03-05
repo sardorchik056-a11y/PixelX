@@ -18,10 +18,17 @@ mine_router = Router()
 # ─────────────────────────────────────────
 #  Emoji IDs
 # ─────────────────────────────────────────
-EMOJI_MINES  = "5393480373944459905"
-EMOJI_GOLD   = "5278467510604160626"
-EMOJI_BACK   = "5906771962734057347"
-EMOJI_WALLET = "5443127283898405358"
+EMOJI_MINES    = "5393480373944459905"
+EMOJI_GOLD     = "5278467510604160626"
+EMOJI_BACK     = "5906771962734057347"
+EMOJI_WALLET   = "5443127283898405358"
+EMOJI_SELL     = "5393480373944459905"   # продать
+EMOJI_BAG      = "5393480373944459905"   # мои кирки
+EMOJI_SHOP     = "5393480373944459905"   # магазин
+EMOJI_PROGRESS = "5393480373944459905"   # прогресс
+EMOJI_REFRESH  = "5393480373944459905"   # обновить
+EMOJI_OWNED    = "5393480373944459905"   # куплено (галка)
+EMOJI_LOCKED   = "5393480373944459905"   # заблокировано
 
 NOX_TO_PX        = 15   # 1 Nox = 15 Px
 TICK_MINUTES     = 3    # каждые 3 минуты начисляется порция
@@ -146,21 +153,21 @@ def progress_bar(current_ticks: int, max_ticks: int, length: int = 12) -> str:
 def mine_main_keyboard(is_mining: bool) -> InlineKeyboardMarkup:
     rows = []
     if is_mining:
-        rows.append([InlineKeyboardButton(text="📊 Прогресс копания", callback_data="mine_progress")])
+        rows.append([InlineKeyboardButton(text="Прогресс копания", callback_data="mine_progress", icon_custom_emoji_id=EMOJI_PROGRESS)])
     else:
-        rows.append([InlineKeyboardButton(text="⛏ Начать копание",   callback_data="mine_start_pick")])
+        rows.append([InlineKeyboardButton(text="Начать копание",   callback_data="mine_start_pick", icon_custom_emoji_id=PICKAXE_EMOJI_ID)])
     rows.append([
-        InlineKeyboardButton(text="💰 Продать Nox",  callback_data="mine_sell"),
-        InlineKeyboardButton(text="🎒 Мои кирки",    callback_data="mine_owned"),
+        InlineKeyboardButton(text="Продать Nox", callback_data="mine_sell",  icon_custom_emoji_id=EMOJI_SELL),
+        InlineKeyboardButton(text="Мои кирки",   callback_data="mine_owned", icon_custom_emoji_id=EMOJI_BAG),
     ])
-    rows.append([InlineKeyboardButton(text="🪓 Магазин кирок", callback_data="mine_shop_0")])
-    rows.append([InlineKeyboardButton(text="Назад", callback_data="main_menu", icon_custom_emoji_id=EMOJI_BACK)])
+    rows.append([InlineKeyboardButton(text="Магазин кирок", callback_data="mine_shop_0", icon_custom_emoji_id=EMOJI_SHOP)])
+    rows.append([InlineKeyboardButton(text="Назад",         callback_data="main_menu",   icon_custom_emoji_id=EMOJI_BACK)])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 def progress_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔄 Обновить",  callback_data="mine_progress")],
-        [InlineKeyboardButton(text="Назад",        callback_data="mine", icon_custom_emoji_id=EMOJI_BACK)],
+        [InlineKeyboardButton(text="Обновить", callback_data="mine_progress", icon_custom_emoji_id=EMOJI_REFRESH)],
+        [InlineKeyboardButton(text="Назад",    callback_data="mine",          icon_custom_emoji_id=EMOJI_BACK)],
     ])
 
 def shop_keyboard(page: int, owned: set) -> InlineKeyboardMarkup:
@@ -168,14 +175,14 @@ def shop_keyboard(page: int, owned: set) -> InlineKeyboardMarkup:
     start    = page * per_page
     rows     = []
     for p in PICKAXES[start:start + per_page]:
-        mark  = "✅" if p["id"] in owned else "🔒"
-        label = f"{mark} {p['name']} — {p['price']:,} Px"
-        rows.append([InlineKeyboardButton(text=label, callback_data=f"mine_buy_{p['id']}", icon_custom_emoji_id=PICKAXE_EMOJI_ID)])
+        emoji_id = EMOJI_OWNED if p["id"] in owned else EMOJI_LOCKED
+        label    = f"{p['name']} — {p['price']:,} Px"
+        rows.append([InlineKeyboardButton(text=label, callback_data=f"mine_buy_{p['id']}", icon_custom_emoji_id=emoji_id)])
     nav = []
     if page > 0:
-        nav.append(InlineKeyboardButton(text="◀ Назад", callback_data=f"mine_shop_{page-1}"))
+        nav.append(InlineKeyboardButton(text="Назад", callback_data=f"mine_shop_{page-1}", icon_custom_emoji_id=EMOJI_BACK))
     if start + per_page < len(PICKAXES):
-        nav.append(InlineKeyboardButton(text="Далее ▶", callback_data=f"mine_shop_{page+1}"))
+        nav.append(InlineKeyboardButton(text="Далее",  callback_data=f"mine_shop_{page+1}", icon_custom_emoji_id=EMOJI_REFRESH))
     if nav:
         rows.append(nav)
     rows.append([InlineKeyboardButton(text="Назад", callback_data="mine", icon_custom_emoji_id=EMOJI_BACK)])
