@@ -48,6 +48,9 @@ EMOJI_GOLD        = "5278467510604160626"
 EMOJI_STATS       = "5231200819986047254"
 EMOJI_DEVELOPMENT = "5445355530111437729"
 EMOJI_WELCOME     = "5199885118214255386"
+EMOJI_BIRJ = "5402186569006210455"
+EMOJI_MINE = "5197371802136892976"
+EMOJI_BONUS = "5305699699204837855"
 
 # ─────────────────────────────────────────
 #  БД пользователей
@@ -145,10 +148,10 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
         [
             InlineKeyboardButton(text="Игры",      callback_data="games",     icon_custom_emoji_id=EMOJI_GAMES),
             InlineKeyboardButton(text="Лидеры",    callback_data="leaders",   icon_custom_emoji_id=EMOJI_LEADERS),
-            InlineKeyboardButton(text="Бонус",     callback_data="bonus",     icon_custom_emoji_id=EMOJI_WALLET),
+            InlineKeyboardButton(text="Бонус",     callback_data="bonus",     icon_custom_emoji_id=EMOJI_BONUS),
         ],
         [
-            InlineKeyboardButton(text="Биржа",     callback_data="exchange",  icon_custom_emoji_id=EMOJI_WALLET),
+            InlineKeyboardButton(text="Биржа",     callback_data="exchange",  icon_custom_emoji_id=EMOJI_BIRJ),
         ],
         [
             InlineKeyboardButton(text="Промокоды", callback_data="promocodes",icon_custom_emoji_id=EMOJI_PROMO),
@@ -156,7 +159,7 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="Инструкция",callback_data="instruction",icon_custom_emoji_id=EMOJI_INSTRUCT),
         ],
         [
-            InlineKeyboardButton(text="Шахта",     callback_data="mine",      icon_custom_emoji_id=EMOJI_MINES),
+            InlineKeyboardButton(text="Шахта",     callback_data="mine",      icon_custom_emoji_id=EMOJI_MINE),
         ],
     ])
 
