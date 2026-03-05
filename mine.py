@@ -438,7 +438,7 @@ async def cb_mine_shop(call: CallbackQuery):
             f'~<code>{avg}</code> avg  ·  ⏱ <code>{p["hours"]} ч</code>\n'
         )
     await call.message.edit_text(
-        f'<tg-emoji emoji-id="{EMOJI_MINES}">⛏</tg-emoji> <b>Магазин кирок</b> — {tiers.get(page, "")}\n\n'
+        f'<tg-emoji emoji-id="{EMOJI_SHOP}">⛏</tg-emoji> <b>Магазин кирок</b> — {tiers.get(page, "")}\n\n'
         f'<blockquote>1 Nox = <b>{NOX_TO_PX} Px</b>  ·  каждые <b>5 мин</b> капает порция Nox</blockquote>\n'
         f'{lines}',
         reply_markup=shop_keyboard(page, data["owned"])
