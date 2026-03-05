@@ -58,17 +58,16 @@ def referrals_text(uid: int, bot_username: str) -> str:
     return (
         f'<tg-emoji emoji-id="{EMOJI_PARTNERS}">👥</tg-emoji> <b>Рефералы</b>\n\n'
         f'<blockquote>'
-        f'<tg-emoji emoji-id="{EMOJI_GOLD}">💰</tg-emoji>  <b>Награда за приглашение:</b> <code>{REFERRAL_REWARD_PX:,} Px</code>\n'
+        f'<tg-emoji emoji-id="5461151367559141950">💰</tg-emoji>  <b>Награда за приглашение:</b> <code>{REFERRAL_REWARD_PX:,} Px</code>\n'
         f'<tg-emoji emoji-id="{EMOJI_STATS}">📊</tg-emoji>  <b>Приглашено всего:</b> <code>{stats["total"]}</code>\n'
-        f'<tg-emoji emoji-id="{EMOJI_STATS}">📊</tg-emoji>  <b>Активированных:</b> <code>{stats["rewarded"]}</code>\n'
-        f'<tg-emoji emoji-id="{EMOJI_GOLD}">💰</tg-emoji>  <b>Заработано с рефералов:</b> <code>{stats["earned"]:,} Px</code>'
+        f'<tg-emoji emoji-id="5429651785352501917">💰</tg-emoji>  <b>Заработано всего:</b> <code>{stats["earned"]:,} Px</code>'
         f'</blockquote>\n\n'
         f'<blockquote>'
-        f'🔗  <b>Ваша реферальная ссылка:</b>\n'
+        f'<tg-emoji emoji-id="{EMOJI_COPY}">💰</tg-emoji>  <b>Ваша реферальная ссылка:</b>\n'
         f'<code>{ref_link}</code>'
         f'</blockquote>\n\n'
         f'<blockquote>'
-        f'ℹ️  <i>Reward зачисляется сразу после того как приглашённый напишет /start по вашей ссылке</i>'
+        f'<tg-emoji emoji-id="5334544901428229844">💰</tg-emoji>  <i>Reward зачисляется сразу после того как приглашённый напишет /start по вашей ссылке</i>'
         f'</blockquote>'
     )
 
