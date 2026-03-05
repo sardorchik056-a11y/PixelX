@@ -1,5 +1,5 @@
 from aiogram import Router, F, Bot
-from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, Message
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, Message, CopyTextButton
 
 from database import (
     db_get_referral_stats,
@@ -33,7 +33,7 @@ def referrals_keyboard(uid: int, bot_username: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(
             text="Скопировать ссылку",
-            copy_text=ref_link,          # нативная кнопка копирования Telegram
+            copy_text=CopyTextButton(text=ref_link),
         )],
         [InlineKeyboardButton(
             text="Поделиться",
