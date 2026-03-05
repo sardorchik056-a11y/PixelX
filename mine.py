@@ -35,7 +35,7 @@ EMOJI_LOCKED   = "5210952531676504517"
 
 NOX_TO_PX       = 5
 TICK_MINUTES    = 5
-REFRESH_SECONDS = 120
+REFRESH_SECONDS = 120  # watchdog проверяет завершение каждые 2 мин
 
 PICKAXE_EMOJI_ID = "5197371802136892976"
 
@@ -62,10 +62,9 @@ PICKAXES = [
 PICKAXE_BY_ID = {p["id"]: p for p in PICKAXES}
 
 # ─────────────────────────────────────────
-#  Bot ref + progress watchers
+#  Bot ref
 # ─────────────────────────────────────────
 _bot_ref: Bot | None = None
-progress_watchers: dict[int, tuple[int, int]] = {}  # uid -> (chat_id, msg_id)
 
 def set_bot_ref(bot: Bot):
     global _bot_ref
@@ -73,14 +72,12 @@ def set_bot_ref(bot: Bot):
 
 
 # ─────────────────────────────────────────
-#  Получение данных пользователя шахты
+#  Получение / сохранение данных шахты
 # ─────────────────────────────────────────
 def get_mine_user(uid: int) -> dict:
-    """Загружает данные из БД. Возвращает dict, изменения нужно сохранять через save_mine_user."""
     return db_get_mine_user(uid)
 
 def save_mine_user(uid: int, data: dict):
-    """Сохраняет изменённый dict обратно в БД."""
     db_save_mine_user(uid, data)
 
 
@@ -316,8 +313,6 @@ async def cb_mine_progress(call: CallbackQuery):
     if not data["mining_end"]:
         await call.answer("⛏ Копание не запущено!", show_alert=True); return
 
-    progress_watchers[uid] = (call.message.chat.id, call.message.message_id)
-
     await call.message.edit_text(progress_text(uid), reply_markup=progress_keyboard())
     if set_owner_fn:
         set_owner_fn(call.message.message_id, uid)
@@ -335,7 +330,7 @@ async def cb_mine_start_pick(call: CallbackQuery):
         f'<tg-emoji emoji-id="5262844652964303985">⛏</tg-emoji> <b>Выберите кирку</b>\n\n'
         f'<blockquote>'
         f'Nox зачислится автоматически по окончании цикла.\n'
-        f'Прогресс можно отслеживать каждые 2 минуты!'
+        f'Прогресс можно отслеживать кнопкой "Обновить".'
         f'</blockquote>',
         reply_markup=pick_select_keyboard(data["owned"])
     )
@@ -537,15 +532,14 @@ async def cb_mine_sell(call: CallbackQuery):
 
 
 # ─────────────────────────────────────────
-#  Watchdog — авто-обновление прогресса + финализация
+#  Watchdog — только финализация завершённых сеансов
+#  (авто-обновление сообщений убрано — юзер обновляет кнопкой)
 # ─────────────────────────────────────────
-
 async def mine_watchdog():
     while True:
         await asyncio.sleep(REFRESH_SECONDS)
         now = datetime.now()
 
-        # Загружаем всех активных майнеров из БД
         from database import get_conn
         with get_conn() as conn:
             rows = conn.execute(
@@ -554,30 +548,10 @@ async def mine_watchdog():
         active_uids = [r["uid"] for r in rows]
 
         for uid in active_uids:
-            data    = get_mine_user(uid)
+            data = get_mine_user(uid)
             if not data["mining_end"]:
                 continue
-
-            pickaxe = PICKAXE_BY_ID[data["pickaxe_id"]]
-
             if now >= data["mining_end"]:
+                pickaxe = PICKAXE_BY_ID[data["pickaxe_id"]]
                 finalize_mining(data, pickaxe)
                 save_mine_user(uid, data)
-                progress_watchers.pop(uid, None)
-                continue
-
-            apply_new_ticks(data, pickaxe)
-            save_mine_user(uid, data)
-
-            if uid in progress_watchers and _bot_ref:
-                chat_id, msg_id = progress_watchers[uid]
-                try:
-                    await _bot_ref.edit_message_text(
-                        chat_id=chat_id,
-                        message_id=msg_id,
-                        text=progress_text(uid),
-                        reply_markup=progress_keyboard(),
-                        parse_mode="HTML"
-                    )
-                except TelegramBadRequest:
-                    pass
