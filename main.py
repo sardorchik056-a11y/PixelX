@@ -274,10 +274,10 @@ async def cmd_start(message: Message, command: CommandObject):
                             if rewarded_inviter:
                                 # Уведомляем приглашённого
                                 await message.answer(
-                                    f'<tg-emoji emoji-id="{EMOJI_PARTNERS}">👥</tg-emoji> '
+                                    f'<tg-emoji emoji-id="5222079954421818267">👥</tg-emoji> '
                                     f'<b>Вы зашли по реферальной ссылке!</b>\n\n'
                                     f'<blockquote>'
-                                    f'Пригласивший вас получил <code>{REFERRAL_REWARD_PX:,} Px</code> 🎉'
+                                    f'Пригласивший вас получил <code>{REFERRAL_REWARD_PX:,} Px</code> <tg-emoji emoji-id="5461151367559141950">👥</tg-emoji>'
                                     f'</blockquote>'
                                 )
                                 # Уведомляем пригласившего
@@ -285,13 +285,8 @@ async def cmd_start(message: Message, command: CommandObject):
                                     await bot.send_message(
                                         chat_id=inviter_id,
                                         text=(
-                                            f'<tg-emoji emoji-id="{EMOJI_PARTNERS}">👥</tg-emoji> '
+                                            f'<tg-emoji emoji-id="5222079954421818267">👥</tg-emoji> '
                                             f'<b>Новый реферал!</b>\n\n'
-                                            f'<blockquote>'
-                                            f'По вашей ссылке зарегистрировался новый пользователь.\n'
-                                            f'<tg-emoji emoji-id="{EMOJI_GOLD}">💰</tg-emoji>  '
-                                            f'Вам начислено <code>+{REFERRAL_REWARD_PX:,} Px</code>!'
-                                            f'</blockquote>'
                                         )
                                     )
                                 except Exception:
