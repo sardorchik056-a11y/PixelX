@@ -169,7 +169,7 @@ def shop_keyboard(page: int, owned: set) -> InlineKeyboardMarkup:
     rows     = []
     for p in PICKAXES[start:start + per_page]:
         mark  = "✅" if p["id"] in owned else "🔒"
-        label = f"{mark} {p['emoji']} {p['name']} — {p['price']:,} Px"
+        label = f"{mark} {pickaxe_icon()} {p['name']} — {p['price']:,} Px"
         rows.append([InlineKeyboardButton(text=label, callback_data=f"mine_buy_{p['id']}")])
     nav = []
     if page > 0:
@@ -187,7 +187,7 @@ def pick_select_keyboard(owned: set) -> InlineKeyboardMarkup:
         p = PICKAXE_BY_ID[pid]
         avg = round((p["nox_min"] + p["nox_max"]) / 2, 1)
         rows.append([InlineKeyboardButton(
-            text=f"{p['emoji']} {p['name']}  ·  ~{avg} Nox/3мин  ·  {p['hours']}ч",
+            text=f"{pickaxe_icon()} {p['name']}  ·  ~{avg} Nox/3мин  ·  {p['hours']}ч",
             callback_data=f"mine_equip_{pid}"
         )])
     rows.append([InlineKeyboardButton(text="Назад", callback_data="mine", icon_custom_emoji_id=EMOJI_BACK)])
