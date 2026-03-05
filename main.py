@@ -139,22 +139,24 @@ dp.include_router(mine_router)
 def main_menu_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text="Профиль",   callback_data="profile",    icon_custom_emoji_id=EMOJI_PROFILE),
-            InlineKeyboardButton(text="Рефералы",  callback_data="referrals",  icon_custom_emoji_id=EMOJI_PARTNERS),
-            InlineKeyboardButton(text="Игры",      callback_data="games",      icon_custom_emoji_id=EMOJI_GAMES),
+            InlineKeyboardButton(text="Профиль",   callback_data="profile",   icon_custom_emoji_id=EMOJI_PROFILE),
+            InlineKeyboardButton(text="Рефералы",  callback_data="referrals", icon_custom_emoji_id=EMOJI_PARTNERS),
         ],
         [
-            InlineKeyboardButton(text="Лидеры",    callback_data="leaders",    icon_custom_emoji_id=EMOJI_LEADERS),
-            InlineKeyboardButton(text="Биржа",     callback_data="exchange",   icon_custom_emoji_id=EMOJI_WALLET),
+            InlineKeyboardButton(text="Игры",      callback_data="games",     icon_custom_emoji_id=EMOJI_GAMES),
+            InlineKeyboardButton(text="Лидеры",    callback_data="leaders",   icon_custom_emoji_id=EMOJI_LEADERS),
+            InlineKeyboardButton(text="Бонус",     callback_data="bonus",     icon_custom_emoji_id=EMOJI_WALLET),
         ],
         [
-            InlineKeyboardButton(text="Бонус",     callback_data="bonus",      icon_custom_emoji_id=EMOJI_WALLET),
-            InlineKeyboardButton(text="Промокоды", callback_data="promocodes", icon_custom_emoji_id=EMOJI_PROMO),
-            InlineKeyboardButton(text="Шахта",     callback_data="mine",       icon_custom_emoji_id=EMOJI_MINES),
+            InlineKeyboardButton(text="Биржа",     callback_data="exchange",  icon_custom_emoji_id=EMOJI_WALLET),
         ],
         [
-            InlineKeyboardButton(text="О проекте", callback_data="about",      icon_custom_emoji_id=EMOJI_ABOUT),
+            InlineKeyboardButton(text="Промокоды", callback_data="promocodes",icon_custom_emoji_id=EMOJI_PROMO),
+            InlineKeyboardButton(text="О проекте", callback_data="about",     icon_custom_emoji_id=EMOJI_ABOUT),
             InlineKeyboardButton(text="Инструкция",callback_data="instruction",icon_custom_emoji_id=EMOJI_INSTRUCT),
+        ],
+        [
+            InlineKeyboardButton(text="Шахта",     callback_data="mine",      icon_custom_emoji_id=EMOJI_MINES),
         ],
     ])
 
