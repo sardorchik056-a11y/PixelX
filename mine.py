@@ -226,29 +226,29 @@ def mine_main_text(uid: int) -> str:
         tl = time_left_str(data["mining_end"])
         status = (
             f'\n<blockquote>'
-            f'⏳  <b>Идёт копание</b>  —  осталось <code>{tl}</code>\n'
-            f'🔒  <i>Нажмите "Прогресс копания" чтобы следить</i>'
+            f'<tg-emoji emoji-id="5906852613629941703">⚡</tg-emoji>  <b>Идёт копание</b>  —  осталось <code>{tl}</code>\n'
+            f'<tg-emoji emoji-id="5201691993775818138">⚡</tg-emoji>  <i>Нажмите "Прогресс копания" чтобы следить</i>'
             f'</blockquote>'
         )
     else:
         status = (
             f'\n<blockquote>'
             f'💤  <b>Шахта простаивает</b>\n'
-            f'⛏  <i>Нажмите "Начать копание"</i>'
+            f'<tg-emoji emoji-id="5201691993775818138">⚡</tg-emoji>  <i>Нажмите "Начать копание"</i>'
             f'</blockquote>'
         )
 
     return (
-        f'<tg-emoji emoji-id="{EMOJI_MINES}">⛏</tg-emoji> <b>Шахта</b>\n\n'
+        f'<tg-emoji emoji-id="5197371802136892976">⛏</tg-emoji> <b>Шахта</b>\n\n'
         f'<blockquote>'
         f'<tg-emoji emoji-id="{EMOJI_GOLD}">💎</tg-emoji>  <b>Баланс Nox:</b> <code>{data["nox"]:.2f} Nox</code>\n'
-        f'<tg-emoji emoji-id="{EMOJI_WALLET}">💰</tg-emoji>  <b>≈ в Px:</b> <code>{nox_px:.2f} Px</code>'
+        f'<tg-emoji emoji-id="5199552030615558774">💰</tg-emoji>  <b>≈ в Px:</b> <code>{nox_px:.2f} Px</code>'
         f'</blockquote>\n\n'
         f'<blockquote>'
         f'{pickaxe_icon()}  <b>Кирка:</b> {pickaxe["name"]}\n'
-        f'⚡  <b>Добыча:</b> <code>{pickaxe["nox_min"]}–{pickaxe["nox_max"]} Nox</code> / 3 мин\n'
-        f'⏱  <b>Цикл:</b> <code>{pickaxe["hours"]} ч</code>\n'
-        f'📈  <b>Ожидаемо за цикл:</b> <code>~{avg_total} Nox</code>'
+        f'⚡  <b>Добыча:</b> <code>{pickaxe["nox_min"]}–{pickaxe["nox_max"]} Nox / 3 мин</code>\n'
+        f'<tg-emoji emoji-id="5382194935057372936">💰</tg-emoji>  <b>Цикл:</b> <code>{pickaxe["hours"]} ч</code>\n'
+        f'<tg-emoji emoji-id="5303214794336125778">💰</tg-emoji>  <b>Ожидаемо за цикл:</b> <code>~{avg_total} Nox</code>'
         f'</blockquote>'
         f'{status}'
     )
@@ -262,8 +262,8 @@ def progress_text(uid: int) -> str:
         return (
             f'<tg-emoji emoji-id="{EMOJI_MINES}">⛏</tg-emoji> <b>Копание завершено!</b>\n\n'
             f'<blockquote>'
-            f'✅  Nox зачислен в баланс шахты\n'
-            f'💰  <b>Баланс:</b> <code>{data["nox"]:.2f} Nox</code>'
+            f' <tg-emoji emoji-id="5429651785352501917">💰</tg-emoji> Nox зачислен в баланс шахты\n'
+            f'<tg-emoji emoji-id="5278467510604160626">💰</tg-emoji>  <b>Баланс:</b> <code>{data["nox"]:.2f} Nox</code>'
             f'</blockquote>'
         )
 
@@ -277,18 +277,18 @@ def progress_text(uid: int) -> str:
     now_str    = datetime.now().strftime("%H:%M:%S")
 
     return (
-        f'<tg-emoji emoji-id="{EMOJI_MINES}">⛏</tg-emoji> <b>Прогресс копания</b>\n\n'
+        f'<tg-emoji emoji-id="5197371802136892976">⛏</tg-emoji> <b>Прогресс копания</b>\n\n'
         f'<blockquote>'
         f'{pickaxe_icon()}  <b>{pickaxe["name"]}</b>\n'
         f'⚡  <code>{pickaxe["nox_min"]}–{pickaxe["nox_max"]} Nox</code> / 3 мин'
         f'</blockquote>\n\n'
         f'<blockquote>'
         f'<code>{bar}</code>  <b>{pct}%</b>\n\n'
-        f'💎  <b>Выкопано:</b> <code>{data["accumulated"]:.2f} Nox</code>\n'
+        f'<tg-emoji emoji-id="5305699699204837855">⛏</tg-emoji>  <b>Выкопано:</b> <code>{data["accumulated"]:.2f} Nox</code>\n'
         f'⏳  <b>До конца:</b> <code>{tl}</code>'
         f'</blockquote>\n\n'
         f'<blockquote>'
-        f'🕐  <i>Обновлено: {now_str}  ·  авто каждые 2 мин</i>'
+        f'🕐  <i>Обновлено: {now_str}  ·</i>'
         f'</blockquote>'
     )
 
@@ -328,7 +328,7 @@ async def cb_mine_progress(call: CallbackQuery):
     await call.message.edit_text(progress_text(uid), reply_markup=progress_keyboard())
     if set_owner_fn:
         set_owner_fn(call.message.message_id, uid)
-    await call.answer("🔄 Обновлено!")
+    await call.answer("Обновлено!")
 
 
 @mine_router.callback_query(F.data == "mine_start_pick")
@@ -366,15 +366,15 @@ async def cb_mine_equip(call: CallbackQuery):
     data["ticks_paid"]  = 0
     data["accumulated"] = 0.0
     await call.message.edit_text(
-        f'<tg-emoji emoji-id="{EMOJI_MINES}">⛏</tg-emoji> <b>Копание началось!</b>\n\n'
+        f'<tg-emoji emoji-id="5197371802136892976">⛏</tg-emoji> <b>Копание началось!</b>\n\n'
         f'<blockquote>'
         f'{pickaxe_icon()}  <b>Кирка:</b> {pickaxe["name"]}\n'
         f'⚡  <b>Добыча:</b> <code>{pickaxe["nox_min"]}–{pickaxe["nox_max"]} Nox</code> / 3 мин\n'
         f'⏱  <b>Цикл:</b> <code>{pickaxe["hours"]} ч</code>\n'
-        f'🔒  <b>Nox зачислится автоматически в конце</b>'
+        f'<tg-emoji emoji-id="5400362079783770689">⛏</tg-emoji>  <b>Nox зачислится автоматически в конце</b>'
         f'</blockquote>\n\n'
         f'<blockquote>'
-        f'📊  <i>Используйте "Прогресс копания" для слежения</i>'
+        f' <tg-emoji emoji-id="5201691993775818138">⛏</tg-emoji> <i>Используйте "Прогресс копания" для слежения</i>'
         f'</blockquote>',
         reply_markup=back_mine_keyboard()
     )
@@ -414,7 +414,7 @@ async def cb_mine_shop(call: CallbackQuery):
         await call.answer("🚫 Это не ваша кнопка!", show_alert=True); return
     page = int(call.data.split("_")[2])
     data = get_mine_user(call.from_user.id)
-    tiers = {0: "🪵 Деревянный", 1: "⚙️ Железный", 2: "🥇 Золотой", 3: "💎 Кристальный", 4: "🐉 Легендарный"}
+    tiers = {0: "1", 1: "2", 2: "3", 3: "4", 4: "5"}
     items = PICKAXES[page * 5:(page + 1) * 5]
     lines = ""
     for p in items:
@@ -422,7 +422,7 @@ async def cb_mine_shop(call: CallbackQuery):
         mark  = "✅" if p["id"] in data["owned"] else "🔒"
         lines += (
             f'\n{mark} {pickaxe_icon()} <b>{p["name"]}</b>\n'
-            f'   💵 <code>{p["price"]:,} Px</code>  ·  '
+            f'    <code>{p["price"]:,} Px</code>  ·  '
             f'⚡ <code>{p["nox_min"]}–{p["nox_max"]} Nox</code>/3мин  ·  '
             f'~<code>{avg}</code> avg  ·  ⏱ <code>{p["hours"]} ч</code>\n'
         )
@@ -459,7 +459,7 @@ async def cb_mine_buy(call: CallbackQuery):
     # обновляем магазин
     await cb_mine_shop.__wrapped__(call) if hasattr(cb_mine_shop, '__wrapped__') else None
     # просто редактируем снова
-    tiers = {0: "🪵 Деревянный", 1: "⚙️ Железный", 2: "🥇 Золотой", 3: "💎 Кристальный", 4: "🐉 Легендарный"}
+    tiers = {0: "1", 1: "2", 2: "3", 3: "4", 4: "5"}
     items = PICKAXES[page * 5:(page + 1) * 5]
     lines = ""
     for p in items:
@@ -467,12 +467,12 @@ async def cb_mine_buy(call: CallbackQuery):
         mark = "✅" if p["id"] in data["owned"] else "🔒"
         lines += (
             f'\n{mark} {pickaxe_icon()} <b>{p["name"]}</b>\n'
-            f'   💵 <code>{p["price"]:,} Px</code>  ·  '
+            f'    <code>{p["price"]:,} Px</code>  ·  '
             f'⚡ <code>{p["nox_min"]}–{p["nox_max"]} Nox</code>/3мин  ·  '
             f'~<code>{round((p["nox_min"]+p["nox_max"])/2,1)}</code> avg  ·  ⏱ <code>{p["hours"]} ч</code>\n'
         )
     await call.message.edit_text(
-        f'<tg-emoji emoji-id="{EMOJI_MINES}">⛏</tg-emoji> <b>Магазин кирок</b> — {tiers.get(page, "")}\n\n'
+        f'<tg-emoji emoji-id="5197371802136892976">⛏</tg-emoji> <b>Магазин кирок</b> — {tiers.get(page, "")}\n\n'
         f'<blockquote>1 Nox = <b>{NOX_TO_PX} Px</b>  ·  каждые <b>3 мин</b> капает порция Nox</blockquote>\n'
         f'{lines}',
         reply_markup=shop_keyboard(page, data["owned"])
@@ -497,7 +497,7 @@ async def cb_mine_sell(call: CallbackQuery):
         f'<blockquote>'
         f'⛏  <b>Продано:</b> <code>{nox_amount:.2f} Nox</code>\n'
         f'<tg-emoji emoji-id="{EMOJI_WALLET}">💰</tg-emoji>  <b>Получено:</b> <code>+{px_earned:.2f} Px</code>\n'
-        f'📊  <b>Курс:</b> <code>1 Nox = {NOX_TO_PX} Px</code>'
+        f'<tg-emoji emoji-id="5231200819986047254">⛏</tg-emoji>  <b>Курс:</b> <code>1 Nox = {NOX_TO_PX} Px</code>'
         f'</blockquote>',
         reply_markup=back_mine_keyboard()
     )
