@@ -3,17 +3,28 @@ import os
 from datetime import datetime
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.filters import CommandStart
+from aiogram.filters import CommandStart, CommandObject
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 
 from dotenv import load_dotenv
 
 import mine as _mine_module
+import referrals as _referral_module
 from mine import mine_router, mine_watchdog
-from database import init_db, db_get_or_create_user, db_get_px, db_add_px, db_spend_px
+from referrals import referral_router
+from database import (
+    init_db,
+    db_get_or_create_user,
+    db_get_px,
+    db_add_px,
+    db_spend_px,
+    db_register_referral,
+    db_try_reward_referral,
+    db_is_already_referred,
+    REFERRAL_REWARD_PX,
+)
 
-# Загружаем переменные из .env файла
 load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -65,12 +76,16 @@ def is_owner(message_id: int, user_id: int) -> bool:
     return owner is None or owner == user_id
 
 def inject_to_modules(bot: Bot):
+    # mine
     _mine_module.set_bot_ref(bot)
     _mine_module.set_owner_fn = set_owner
     _mine_module.is_owner_fn  = is_owner
     _mine_module.get_px_fn    = db_get_px
     _mine_module.add_px_fn    = db_add_px
     _mine_module.spend_px_fn  = db_spend_px
+    # referrals
+    _referral_module.is_owner_fn  = is_owner
+    _referral_module.set_owner_fn = set_owner
 
 
 # ─────────────────────────────────────────
@@ -80,6 +95,7 @@ bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTM
 dp  = Dispatcher()
 
 dp.include_router(mine_router)
+dp.include_router(referral_router)
 
 
 # ─────────────────────────────────────────
@@ -200,7 +216,6 @@ def build_stats_text(user: dict) -> str:
 #  Разделы в разработке
 # ─────────────────────────────────────────
 DEV_SECTIONS = {
-    "referrals":   "Рефералы",
     "games":       "Игры",
     "leaders":     "Лидеры",
     "exchange":    "Биржа",
@@ -213,11 +228,79 @@ DEV_SECTIONS = {
 # ─────────────────────────────────────────
 #  Хэндлеры
 # ─────────────────────────────────────────
+
 @dp.message(CommandStart())
-async def cmd_start(message: Message):
+async def cmd_start(message: Message, command: CommandObject):
+    uid      = message.from_user.id
+    is_new   = False
+
+    # Проверяем — новый ли пользователь (до создания)
+    from database import db_get_user
+    existing = db_get_user(uid)
+    if existing is None:
+        is_new = True
+
+    # Создаём / обновляем пользователя
     db_get_or_create_user(message.from_user)
+
+    # ── Обработка реферальной ссылки ──────────────────────────────────────
+    if is_new and command.args:
+        args = command.args.strip()
+
+        # Формат: ref_<inviter_id>
+        if args.startswith("ref_"):
+            inviter_part = args[4:]
+
+            # Защита: inviter_id должен быть числом
+            if inviter_part.isdigit():
+                inviter_id = int(inviter_part)
+
+                # Защита: нельзя пригласить самого себя
+                if inviter_id != uid:
+
+                    # Защита: не был ли уже приглашён
+                    if not db_is_already_referred(uid):
+
+                        # Регистрируем реферала
+                        registered = db_register_referral(
+                            invitee_id=uid,
+                            inviter_id=inviter_id,
+                        )
+
+                        if registered:
+                            # Атомарно начисляем награду пригласившему
+                            rewarded_inviter = db_try_reward_referral(uid)
+
+                            if rewarded_inviter:
+                                # Уведомляем приглашённого
+                                await message.answer(
+                                    f'<tg-emoji emoji-id="{EMOJI_PARTNERS}">👥</tg-emoji> '
+                                    f'<b>Вы зашли по реферальной ссылке!</b>\n\n'
+                                    f'<blockquote>'
+                                    f'Пригласивший вас получил <code>{REFERRAL_REWARD_PX:,} Px</code> 🎉'
+                                    f'</blockquote>'
+                                )
+                                # Уведомляем пригласившего
+                                try:
+                                    await bot.send_message(
+                                        chat_id=inviter_id,
+                                        text=(
+                                            f'<tg-emoji emoji-id="{EMOJI_PARTNERS}">👥</tg-emoji> '
+                                            f'<b>Новый реферал!</b>\n\n'
+                                            f'<blockquote>'
+                                            f'По вашей ссылке зарегистрировался новый пользователь.\n'
+                                            f'<tg-emoji emoji-id="{EMOJI_GOLD}">💰</tg-emoji>  '
+                                            f'Вам начислено <code>+{REFERRAL_REWARD_PX:,} Px</code>!'
+                                            f'</blockquote>'
+                                        )
+                                    )
+                                except Exception:
+                                    pass  # пользователь мог заблокировать бота
+
+    # Отправляем главное меню
     sent = await message.answer(MAIN_TEXT, reply_markup=main_menu_keyboard())
-    set_owner(sent.message_id, message.from_user.id)
+    set_owner(sent.message_id, uid)
+
 
 @dp.callback_query(F.data == "main_menu")
 async def cb_main_menu(call: CallbackQuery):
@@ -265,7 +348,7 @@ async def cb_dev_section(call: CallbackQuery):
 #  Запуск
 # ─────────────────────────────────────────
 async def main():
-    init_db()  # создаём таблицы при старте
+    init_db()
     inject_to_modules(bot)
     asyncio.create_task(mine_watchdog())
     print("✅ Бот запущен!")
