@@ -12,7 +12,7 @@ from database import (
 # ─────────────────────────────────────────
 is_owner_fn  = None
 set_owner_fn = None
-get_bot_fn: Bot | None = None   # ссылка на бота для отправки уведомлений
+get_bot_fn: Bot | None = None
 
 referral_router = Router()
 
@@ -24,6 +24,7 @@ EMOJI_PARTNERS = "5906986955911993888"
 EMOJI_GOLD     = "5278467510604160626"
 EMOJI_COPY     = "5344794505584756273"
 EMOJI_STATS    = "5231200819986047254"
+EMOJI_SHARE    = "5456185955772579286"
 
 # ─────────────────────────────────────────
 #  Клавиатура
@@ -34,15 +35,17 @@ def referrals_keyboard(uid: int, bot_username: str) -> InlineKeyboardMarkup:
         [InlineKeyboardButton(
             text="Скопировать ссылку",
             copy_text=CopyTextButton(text=ref_link),
+            icon_custom_emoji_id=EMOJI_COPY,
         )],
         [InlineKeyboardButton(
             text="Поделиться",
-            url=f"https://t.me/share/url?url={ref_link}&text=Присоединяйся+к+проекту%21"
+            url=f"https://t.me/share/url?url={ref_link}&text=Присоединяйся+к+проекту%21",
+            icon_custom_emoji_id=EMOJI_SHARE,
         )],
         [InlineKeyboardButton(
             text="Назад",
             callback_data="main_menu",
-            icon_custom_emoji_id=EMOJI_BACK
+            icon_custom_emoji_id=EMOJI_BACK,
         )],
     ])
 
