@@ -1,4 +1,5 @@
 import asyncio
+import os
 from datetime import datetime
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
@@ -9,7 +10,8 @@ from aiogram.client.default import DefaultBotProperties
 import mine as _mine_module
 from mine import mine_router, mine_watchdog
 
-BOT_TOKEN = "8586332532:AAHX758cf6iOUpPNpY2sqseGBYsKJo9js4U"
+# FIX: токен берётся из переменной окружения (сам перенесёшь)
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
 
 # ─────────────────────────────────────────
 #  Emoji IDs
@@ -78,9 +80,16 @@ def days_label(n: int) -> str:
 # ─────────────────────────────────────────
 #  Owner guard
 # ─────────────────────────────────────────
+_MSG_OWNERS_MAX = 10_000  # FIX: ограничение размера словаря, чтобы не росло вечно
 _msg_owners: dict[int, int] = {}
 
 def set_owner(message_id: int, user_id: int):
+    # FIX: если словарь слишком большой — чистим старые записи
+    if len(_msg_owners) >= _MSG_OWNERS_MAX:
+        # удаляем первые 20% записей (самые старые по порядку вставки)
+        keys_to_delete = list(_msg_owners.keys())[:_MSG_OWNERS_MAX // 5]
+        for k in keys_to_delete:
+            del _msg_owners[k]
     _msg_owners[message_id] = user_id
 
 def is_owner(message_id: int, user_id: int) -> bool:
@@ -88,6 +97,8 @@ def is_owner(message_id: int, user_id: int) -> bool:
     return owner is None or owner == user_id
 
 def inject_to_modules(bot: Bot):
+    # FIX: передаём bot ref в mine для watchdog'а
+    _mine_module.set_bot_ref(bot)
     _mine_module.set_owner_fn = set_owner
     _mine_module.is_owner_fn  = is_owner
     _mine_module.get_px_fn    = get_px
@@ -101,7 +112,6 @@ def inject_to_modules(bot: Bot):
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp  = Dispatcher()
 
-# Роутер подключается здесь — ДО старта
 dp.include_router(mine_router)
 
 
