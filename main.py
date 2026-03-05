@@ -7,11 +7,29 @@ from aiogram.filters import CommandStart
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 
+from dotenv import load_dotenv  # Добавьте этот импорт
+
 import mine as _mine_module
 from mine import mine_router, mine_watchdog
 
-# FIX: токен берётся из переменной окружения (сам перенесёшь)
-BOT_TOKEN = os.environ.get("BOT_TOKEN")
+# Загружаем переменные из .env файла
+load_dotenv()
+
+# Получаем токен из переменных окружения
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+
+# Проверяем, загрузился ли токен
+if not BOT_TOKEN:
+    raise ValueError(
+        "BOT_TOKEN не найден! Проверьте:\n"
+        "1. Создан ли файл .env в папке проекта\n"
+        "2. Есть ли в нем строка BOT_TOKEN=ваш_токен\n"
+        "3. Нет ли пробелов или кавычек вокруг токена"
+    )
+
+# Для отладки (можно удалить после проверки)
+print(f"Токен загружен: {'Да' if BOT_TOKEN else 'Нет'}")
+print(f"Длина токена: {len(BOT_TOKEN) if BOT_TOKEN else 0}")
 
 # ─────────────────────────────────────────
 #  Emoji IDs
