@@ -7,18 +7,17 @@ from aiogram.filters import CommandStart
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 
-from dotenv import load_dotenv  # Добавьте этот импорт
+from dotenv import load_dotenv
 
 import mine as _mine_module
 from mine import mine_router, mine_watchdog
+from database import init_db, db_get_or_create_user, db_get_px, db_add_px, db_spend_px
 
 # Загружаем переменные из .env файла
 load_dotenv()
 
-# Получаем токен из переменных окружения
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-# Проверяем, загрузился ли токен
 if not BOT_TOKEN:
     raise ValueError(
         "BOT_TOKEN не найден! Проверьте:\n"
@@ -26,10 +25,6 @@ if not BOT_TOKEN:
         "2. Есть ли в нем строка BOT_TOKEN=ваш_токен\n"
         "3. Нет ли пробелов или кавычек вокруг токена"
     )
-
-# Для отладки (можно удалить после проверки)
-print(f"Токен загружен: {'Да' if BOT_TOKEN else 'Нет'}")
-print(f"Длина токена: {len(BOT_TOKEN) if BOT_TOKEN else 0}")
 
 # ─────────────────────────────────────────
 #  Emoji IDs
@@ -48,66 +43,18 @@ EMOJI_GOLD        = "5278467510604160626"
 EMOJI_STATS       = "5231200819986047254"
 EMOJI_DEVELOPMENT = "5445355530111437729"
 EMOJI_WELCOME     = "5199885118214255386"
-EMOJI_BIRJ = "5402186569006210455"
-EMOJI_MINE = "5197371802136892976"
-EMOJI_BONUS = "5305699699204837855"
-
-# ─────────────────────────────────────────
-#  БД пользователей
-# ─────────────────────────────────────────
-USERS_DB: dict[int, dict] = {}
-
-def get_or_create_user(user) -> dict:
-    uid = user.id
-    if uid not in USERS_DB:
-        USERS_DB[uid] = {
-            "id":            uid,
-            "first_name":    user.first_name or "",
-            "last_name":     user.last_name  or "",
-            "username":      user.username   or "",
-            "px":            0,
-            "games_played":  0,
-            "total_won":     0.0,
-            "total_lost":    0.0,
-            "registered_at": datetime.now(),
-        }
-    else:
-        USERS_DB[uid]["first_name"] = user.first_name or ""
-        USERS_DB[uid]["last_name"]  = user.last_name  or ""
-        USERS_DB[uid]["username"]   = user.username   or ""
-    return USERS_DB[uid]
-
-def get_px(uid: int) -> float:
-    return USERS_DB.get(uid, {}).get("px", 0)
-
-def add_px(uid: int, amount: float):
-    if uid in USERS_DB:
-        USERS_DB[uid]["px"] = round(USERS_DB[uid].get("px", 0) + amount, 2)
-
-def spend_px(uid: int, amount: float):
-    if uid in USERS_DB:
-        USERS_DB[uid]["px"] = max(0, round(USERS_DB[uid].get("px", 0) - amount, 2))
-
-def days_in_project(registered_at: datetime) -> int:
-    return (datetime.now() - registered_at).days
-
-def days_label(n: int) -> str:
-    if 11 <= n % 100 <= 19: return "дней"
-    r = n % 10
-    if r == 1:         return "день"
-    if r in (2, 3, 4): return "дня"
-    return "дней"
+EMOJI_BIRJ        = "5402186569006210455"
+EMOJI_MINE        = "5197371802136892976"
+EMOJI_BONUS       = "5305699699204837855"
 
 # ─────────────────────────────────────────
 #  Owner guard
 # ─────────────────────────────────────────
-_MSG_OWNERS_MAX = 10_000  # FIX: ограничение размера словаря, чтобы не росло вечно
+_MSG_OWNERS_MAX = 10_000
 _msg_owners: dict[int, int] = {}
 
 def set_owner(message_id: int, user_id: int):
-    # FIX: если словарь слишком большой — чистим старые записи
     if len(_msg_owners) >= _MSG_OWNERS_MAX:
-        # удаляем первые 20% записей (самые старые по порядку вставки)
         keys_to_delete = list(_msg_owners.keys())[:_MSG_OWNERS_MAX // 5]
         for k in keys_to_delete:
             del _msg_owners[k]
@@ -118,13 +65,12 @@ def is_owner(message_id: int, user_id: int) -> bool:
     return owner is None or owner == user_id
 
 def inject_to_modules(bot: Bot):
-    # FIX: передаём bot ref в mine для watchdog'а
     _mine_module.set_bot_ref(bot)
     _mine_module.set_owner_fn = set_owner
     _mine_module.is_owner_fn  = is_owner
-    _mine_module.get_px_fn    = get_px
-    _mine_module.add_px_fn    = add_px
-    _mine_module.spend_px_fn  = spend_px
+    _mine_module.get_px_fn    = db_get_px
+    _mine_module.add_px_fn    = db_add_px
+    _mine_module.spend_px_fn  = db_spend_px
 
 
 # ─────────────────────────────────────────
@@ -142,24 +88,24 @@ dp.include_router(mine_router)
 def main_menu_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text="Профиль",   callback_data="profile",   icon_custom_emoji_id=EMOJI_PROFILE),
-            InlineKeyboardButton(text="Рефералы",  callback_data="referrals", icon_custom_emoji_id=EMOJI_PARTNERS),
+            InlineKeyboardButton(text="Профиль",   callback_data="profile",    icon_custom_emoji_id=EMOJI_PROFILE),
+            InlineKeyboardButton(text="Рефералы",  callback_data="referrals",  icon_custom_emoji_id=EMOJI_PARTNERS),
         ],
         [
-            InlineKeyboardButton(text="Игры",      callback_data="games",     icon_custom_emoji_id=EMOJI_GAMES),
-            InlineKeyboardButton(text="Лидеры",    callback_data="leaders",   icon_custom_emoji_id=EMOJI_LEADERS),
-            InlineKeyboardButton(text="Бонус",     callback_data="bonus",     icon_custom_emoji_id=EMOJI_BONUS),
+            InlineKeyboardButton(text="Игры",      callback_data="games",      icon_custom_emoji_id=EMOJI_GAMES),
+            InlineKeyboardButton(text="Лидеры",    callback_data="leaders",    icon_custom_emoji_id=EMOJI_LEADERS),
+            InlineKeyboardButton(text="Бонус",     callback_data="bonus",      icon_custom_emoji_id=EMOJI_BONUS),
         ],
         [
-            InlineKeyboardButton(text="Биржа",     callback_data="exchange",  icon_custom_emoji_id=EMOJI_BIRJ),
+            InlineKeyboardButton(text="Биржа",     callback_data="exchange",   icon_custom_emoji_id=EMOJI_BIRJ),
         ],
         [
-            InlineKeyboardButton(text="Промокоды", callback_data="promocodes",icon_custom_emoji_id=EMOJI_PROMO),
-            InlineKeyboardButton(text="О проекте", callback_data="about",     icon_custom_emoji_id=EMOJI_ABOUT),
+            InlineKeyboardButton(text="Промокоды", callback_data="promocodes", icon_custom_emoji_id=EMOJI_PROMO),
+            InlineKeyboardButton(text="О проекте", callback_data="about",      icon_custom_emoji_id=EMOJI_ABOUT),
             InlineKeyboardButton(text="Инструкция",callback_data="instruction",icon_custom_emoji_id=EMOJI_INSTRUCT),
         ],
         [
-            InlineKeyboardButton(text="Шахта",     callback_data="mine",      icon_custom_emoji_id=EMOJI_MINE),
+            InlineKeyboardButton(text="Шахта",     callback_data="mine",       icon_custom_emoji_id=EMOJI_MINE),
         ],
     ])
 
@@ -202,6 +148,16 @@ def dev_text(section: str) -> str:
         f'🚀  Скоро будет доступен!'
         f'</blockquote>'
     )
+
+def days_in_project(registered_at: datetime) -> int:
+    return (datetime.now() - registered_at).days
+
+def days_label(n: int) -> str:
+    if 11 <= n % 100 <= 19: return "дней"
+    r = n % 10
+    if r == 1:         return "день"
+    if r in (2, 3, 4): return "дня"
+    return "дней"
 
 def build_profile_text(user: dict) -> str:
     days  = days_in_project(user["registered_at"])
@@ -259,7 +215,7 @@ DEV_SECTIONS = {
 # ─────────────────────────────────────────
 @dp.message(CommandStart())
 async def cmd_start(message: Message):
-    get_or_create_user(message.from_user)
+    db_get_or_create_user(message.from_user)
     sent = await message.answer(MAIN_TEXT, reply_markup=main_menu_keyboard())
     set_owner(sent.message_id, message.from_user.id)
 
@@ -275,7 +231,7 @@ async def cb_main_menu(call: CallbackQuery):
 async def cb_profile(call: CallbackQuery):
     if not is_owner(call.message.message_id, call.from_user.id):
         await call.answer("🚫 Это не ваша кнопка!", show_alert=True); return
-    user = get_or_create_user(call.from_user)
+    user = db_get_or_create_user(call.from_user)
     await call.message.edit_text(build_profile_text(user), reply_markup=profile_keyboard())
     set_owner(call.message.message_id, call.from_user.id)
     await call.answer()
@@ -284,7 +240,7 @@ async def cb_profile(call: CallbackQuery):
 async def cb_stats(call: CallbackQuery):
     if not is_owner(call.message.message_id, call.from_user.id):
         await call.answer("🚫 Это не ваша кнопка!", show_alert=True); return
-    user = get_or_create_user(call.from_user)
+    user = db_get_or_create_user(call.from_user)
     await call.message.edit_text(build_stats_text(user), reply_markup=back_profile_keyboard())
     set_owner(call.message.message_id, call.from_user.id)
     await call.answer()
@@ -309,6 +265,7 @@ async def cb_dev_section(call: CallbackQuery):
 #  Запуск
 # ─────────────────────────────────────────
 async def main():
+    init_db()  # создаём таблицы при старте
     inject_to_modules(bot)
     asyncio.create_task(mine_watchdog())
     print("✅ Бот запущен!")
