@@ -10,8 +10,10 @@ DB_PATH = "bot.db"
 # ─────────────────────────────────────────
 @contextmanager
 def get_conn():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")   # безопасность при конкурентных записях
+    conn.execute("PRAGMA foreign_keys=ON")
     try:
         yield conn
         conn.commit()
@@ -50,6 +52,18 @@ def init_db():
                 ticks_paid    INTEGER NOT NULL DEFAULT 0,
                 accumulated   REAL    NOT NULL DEFAULT 0
             );
+
+            -- Рефералы: кто кого пригласил
+            CREATE TABLE IF NOT EXISTS referrals (
+                invitee_id    INTEGER PRIMARY KEY,          -- кого пригласили (уникален — нельзя быть приглашённым дважды)
+                inviter_id    INTEGER NOT NULL,             -- кто пригласил
+                rewarded      INTEGER NOT NULL DEFAULT 0,  -- 0/1 — начислена ли награда
+                created_at    TEXT    NOT NULL,
+                FOREIGN KEY (invitee_id) REFERENCES users(id),
+                FOREIGN KEY (inviter_id) REFERENCES users(id)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_referrals_inviter ON referrals(inviter_id);
         """)
     print("✅ БД инициализирована")
 
@@ -132,9 +146,9 @@ def db_get_mine_user(uid: int) -> dict:
 
 
 def db_save_mine_user(uid: int, data: dict):
-    owned_json    = json.dumps(list(data["owned"]))
-    mining_start  = data["mining_start"].isoformat() if data["mining_start"] else None
-    mining_end    = data["mining_end"].isoformat()   if data["mining_end"]   else None
+    owned_json   = json.dumps(list(data["owned"]))
+    mining_start = data["mining_start"].isoformat() if data["mining_start"] else None
+    mining_end   = data["mining_end"].isoformat()   if data["mining_end"]   else None
     with get_conn() as conn:
         conn.execute("""
             INSERT INTO mine (uid, nox, pickaxe_id, owned, mining_start,
@@ -174,3 +188,100 @@ def _row_to_mine(row: dict) -> dict:
         "ticks_paid":   row["ticks_paid"],
         "accumulated":  row["accumulated"],
     }
+
+
+# ─────────────────────────────────────────
+#  Рефералы
+# ─────────────────────────────────────────
+REFERRAL_REWARD_PX = 1000  # награда за приглашение
+
+def db_register_referral(invitee_id: int, inviter_id: int) -> bool:
+    """
+    Регистрирует реферала. Возвращает True если запись создана (новый реферал),
+    False если этот пользователь уже был приглашён кем-либо ранее.
+    Защиты:
+      - нельзя пригласить самого себя
+      - нельзя быть приглашённым дважды (PRIMARY KEY на invitee_id)
+      - inviter должен существовать в users
+    """
+    if invitee_id == inviter_id:
+        return False
+    with get_conn() as conn:
+        # Проверяем что пригласивший существует
+        inviter_exists = conn.execute(
+            "SELECT 1 FROM users WHERE id = ?", (inviter_id,)
+        ).fetchone()
+        if not inviter_exists:
+            return False
+
+        # Проверяем что приглашённый ещё не зарегистрирован как чей-то реферал
+        already = conn.execute(
+            "SELECT 1 FROM referrals WHERE invitee_id = ?", (invitee_id,)
+        ).fetchone()
+        if already:
+            return False
+
+        now = datetime.now().isoformat()
+        try:
+            conn.execute("""
+                INSERT INTO referrals (invitee_id, inviter_id, rewarded, created_at)
+                VALUES (?, ?, 0, ?)
+            """, (invitee_id, inviter_id, now))
+            return True
+        except sqlite3.IntegrityError:
+            # гонка — кто-то вставил между SELECT и INSERT
+            return False
+
+
+def db_try_reward_referral(invitee_id: int) -> int | None:
+    """
+    Начисляет награду пригласившему, если ещё не начислялась.
+    Возвращает inviter_id при успехе, None — если уже начислено или записи нет.
+    Атомарно: UPDATE + проверка затронутых строк.
+    """
+    with get_conn() as conn:
+        cur = conn.execute("""
+            UPDATE referrals SET rewarded = 1
+            WHERE invitee_id = ? AND rewarded = 0
+        """, (invitee_id,))
+        if cur.rowcount == 0:
+            return None  # уже начислено или записи нет
+
+        row = conn.execute(
+            "SELECT inviter_id FROM referrals WHERE invitee_id = ?", (invitee_id,)
+        ).fetchone()
+        if not row:
+            return None
+
+        inviter_id = row["inviter_id"]
+        conn.execute(
+            "UPDATE users SET px = ROUND(px + ?, 2) WHERE id = ?",
+            (REFERRAL_REWARD_PX, inviter_id)
+        )
+        return inviter_id
+
+
+def db_get_referral_stats(uid: int) -> dict:
+    """Возвращает статистику рефералов пользователя."""
+    with get_conn() as conn:
+        total = conn.execute(
+            "SELECT COUNT(*) as cnt FROM referrals WHERE inviter_id = ?", (uid,)
+        ).fetchone()["cnt"]
+        rewarded = conn.execute(
+            "SELECT COUNT(*) as cnt FROM referrals WHERE inviter_id = ? AND rewarded = 1", (uid,)
+        ).fetchone()["cnt"]
+        earned = rewarded * REFERRAL_REWARD_PX
+        return {
+            "total":    total,
+            "rewarded": rewarded,
+            "earned":   earned,
+        }
+
+
+def db_is_already_referred(uid: int) -> bool:
+    """Проверяет — был ли пользователь уже приглашён кем-то."""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT 1 FROM referrals WHERE invitee_id = ?", (uid,)
+        ).fetchone()
+        return row is not None
