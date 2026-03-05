@@ -18,34 +18,40 @@ mine_router = Router()
 # ─────────────────────────────────────────
 #  Emoji IDs
 # ─────────────────────────────────────────
-EMOJI_MINES  = "5305699699204837855"
+EMOJI_MINES  = "5307996024738395492"
 EMOJI_GOLD   = "5278467510604160626"
 EMOJI_BACK   = "5906771962734057347"
 EMOJI_WALLET = "5443127283898405358"
 
 NOX_TO_PX        = 15   # 1 Nox = 15 Px
-TICK_MINUTES     = 10   # каждые 10 минут начисляется порция
+TICK_MINUTES     = 3    # каждые 3 минуты начисляется порция
 REFRESH_SECONDS  = 120  # авто-обновление прогресс-экрана
 
 # ─────────────────────────────────────────
 #  15 кирок  (nox_min, nox_max — за 10 мин)
 # ─────────────────────────────────────────
+# PICKAXE_EMOJI_ID — замените на свой custom emoji ID кирки
+PICKAXE_EMOJI_ID = "5307996024738395492"
+
+def pickaxe_icon() -> str:
+    return f'<tg-emoji emoji-id="{PICKAXE_EMOJI_ID}">⛏</tg-emoji>'
+
 PICKAXES = [
-    {"id":  1, "name": "Деревянная",      "emoji": "🪓", "price":      0, "nox_min":   5, "nox_max":  15, "hours":  3},
-    {"id":  2, "name": "Каменная",        "emoji": "⛏",  "price":    150, "nox_min":  10, "nox_max":  22, "hours":  4},
-    {"id":  3, "name": "Заточенная",      "emoji": "🔪", "price":    350, "nox_min":  15, "nox_max":  30, "hours":  5},
-    {"id":  4, "name": "Железная",        "emoji": "⚒️", "price":    700, "nox_min":  22, "nox_max":  42, "hours":  6},
-    {"id":  5, "name": "Закалённая",      "emoji": "🛠",  "price":   1200, "nox_min":  30, "nox_max":  55, "hours":  8},
-    {"id":  6, "name": "Острая стальная", "emoji": "⚔️", "price":   2000, "nox_min":  40, "nox_max":  70, "hours": 10},
-    {"id":  7, "name": "Золотая",         "emoji": "🥇", "price":   3500, "nox_min":  55, "nox_max":  90, "hours": 12},
-    {"id":  8, "name": "Позолоченная",    "emoji": "✨", "price":   5500, "nox_min":  70, "nox_max": 115, "hours": 16},
-    {"id":  9, "name": "Королевская",     "emoji": "👑", "price":   8000, "nox_min":  90, "nox_max": 145, "hours": 20},
-    {"id": 10, "name": "Кристальная",     "emoji": "💎", "price":  12000, "nox_min": 115, "nox_max": 180, "hours": 24},
-    {"id": 11, "name": "Лазуритовая",     "emoji": "🔷", "price":  18000, "nox_min": 145, "nox_max": 220, "hours": 30},
-    {"id": 12, "name": "Рубиновая",       "emoji": "❤️‍🔥","price":  26000, "nox_min": 180, "nox_max": 270, "hours": 36},
-    {"id": 13, "name": "Драконья",        "emoji": "🐉", "price":  40000, "nox_min": 220, "nox_max": 340, "hours": 48},
-    {"id": 14, "name": "Теневая",         "emoji": "🌑", "price":  60000, "nox_min": 270, "nox_max": 420, "hours": 60},
-    {"id": 15, "name": "Вечная",          "emoji": "♾️", "price":  99999, "nox_min": 340, "nox_max": 530, "hours": 72},
+    {"id":  1, "name": "Кирка-I",  "price":      0, "nox_min":   5, "nox_max":  15, "hours":  3},
+    {"id":  2, "name": "Кирка-II",  "price":    150, "nox_min":  10, "nox_max":  22, "hours":  4},
+    {"id":  3, "name": "Кирка-III",  "price":    350, "nox_min":  15, "nox_max":  30, "hours":  5},
+    {"id":  4, "name": "Кирка-IV",  "price":    700, "nox_min":  22, "nox_max":  42, "hours":  6},
+    {"id":  5, "name": "Кирка-V",  "price":   1200, "nox_min":  30, "nox_max":  55, "hours":  8},
+    {"id":  6, "name": "Кирка-VI",  "price":   2000, "nox_min":  40, "nox_max":  70, "hours": 10},
+    {"id":  7, "name": "Кирка-VII",  "price":   3500, "nox_min":  55, "nox_max":  90, "hours": 12},
+    {"id":  8, "name": "Кирка-VIII",  "price":   5500, "nox_min":  70, "nox_max": 115, "hours": 16},
+    {"id":  9, "name": "Кирка-IX",  "price":   8000, "nox_min":  90, "nox_max": 145, "hours": 20},
+    {"id": 10, "name": "Кирка-X", "price":  12000, "nox_min": 115, "nox_max": 180, "hours": 24},
+    {"id": 11, "name": "Кирка-XI", "price":  18000, "nox_min": 145, "nox_max": 220, "hours": 30},
+    {"id": 12, "name": "Кирка-XII", "price":  26000, "nox_min": 180, "nox_max": 270, "hours": 36},
+    {"id": 13, "name": "Кирка-XIII", "price":  40000, "nox_min": 220, "nox_max": 340, "hours": 48},
+    {"id": 14, "name": "Кирка-XIV", "price":  60000, "nox_min": 270, "nox_max": 420, "hours": 60},
+    {"id": 15, "name": "Кирка-XV", "price":  99999, "nox_min": 340, "nox_max": 530, "hours": 72},
 ]
 PICKAXE_BY_ID = {p["id"]: p for p in PICKAXES}
 
@@ -181,7 +187,7 @@ def pick_select_keyboard(owned: set) -> InlineKeyboardMarkup:
         p = PICKAXE_BY_ID[pid]
         avg = round((p["nox_min"] + p["nox_max"]) / 2, 1)
         rows.append([InlineKeyboardButton(
-            text=f"{p['emoji']} {p['name']}  ·  ~{avg} Nox/10мин  ·  {p['hours']}ч",
+            text=f"{p['emoji']} {p['name']}  ·  ~{avg} Nox/3мин  ·  {p['hours']}ч",
             callback_data=f"mine_equip_{pid}"
         )])
     rows.append([InlineKeyboardButton(text="Назад", callback_data="mine", icon_custom_emoji_id=EMOJI_BACK)])
@@ -231,8 +237,8 @@ def mine_main_text(uid: int) -> str:
         f'<tg-emoji emoji-id="{EMOJI_WALLET}">💰</tg-emoji>  <b>≈ в Px:</b> <code>{nox_px:.2f} Px</code>'
         f'</blockquote>\n\n'
         f'<blockquote>'
-        f'{pickaxe["emoji"]}  <b>Кирка:</b> {pickaxe["name"]}\n'
-        f'⚡  <b>Добыча:</b> <code>{pickaxe["nox_min"]}–{pickaxe["nox_max"]} Nox</code> / 10 мин\n'
+        f'{pickaxe_icon()}  <b>Кирка:</b> {pickaxe["name"]}\n'
+        f'⚡  <b>Добыча:</b> <code>{pickaxe["nox_min"]}–{pickaxe["nox_max"]} Nox</code> / 3 мин\n'
         f'⏱  <b>Цикл:</b> <code>{pickaxe["hours"]} ч</code>\n'
         f'📈  <b>Ожидаемо за цикл:</b> <code>~{avg_total} Nox</code>'
         f'</blockquote>'
@@ -265,8 +271,8 @@ def progress_text(uid: int) -> str:
     return (
         f'<tg-emoji emoji-id="{EMOJI_MINES}">⛏</tg-emoji> <b>Прогресс копания</b>\n\n'
         f'<blockquote>'
-        f'{pickaxe["emoji"]}  <b>{pickaxe["name"]}</b>\n'
-        f'⚡  <code>{pickaxe["nox_min"]}–{pickaxe["nox_max"]} Nox</code> / 10 мин'
+        f'{pickaxe_icon()}  <b>{pickaxe["name"]}</b>\n'
+        f'⚡  <code>{pickaxe["nox_min"]}–{pickaxe["nox_max"]} Nox</code> / 3 мин'
         f'</blockquote>\n\n'
         f'<blockquote>'
         f'<code>{bar}</code>  <b>{pct}%</b>\n\n'
@@ -354,8 +360,8 @@ async def cb_mine_equip(call: CallbackQuery):
     await call.message.edit_text(
         f'<tg-emoji emoji-id="{EMOJI_MINES}">⛏</tg-emoji> <b>Копание началось!</b>\n\n'
         f'<blockquote>'
-        f'{pickaxe["emoji"]}  <b>Кирка:</b> {pickaxe["name"]}\n'
-        f'⚡  <b>Добыча:</b> <code>{pickaxe["nox_min"]}–{pickaxe["nox_max"]} Nox</code> / 10 мин\n'
+        f'{pickaxe_icon()}  <b>Кирка:</b> {pickaxe["name"]}\n'
+        f'⚡  <b>Добыча:</b> <code>{pickaxe["nox_min"]}–{pickaxe["nox_max"]} Nox</code> / 3 мин\n'
         f'⏱  <b>Цикл:</b> <code>{pickaxe["hours"]} ч</code>\n'
         f'🔒  <b>Nox зачислится автоматически в конце</b>'
         f'</blockquote>\n\n'
@@ -381,13 +387,13 @@ async def cb_mine_owned(call: CallbackQuery):
         active = "  🟢 <b>Активна</b>" if pid == data["pickaxe_id"] else ""
         avg    = round((p["nox_min"] + p["nox_max"]) / 2, 1)
         lines += (
-            f'\n{p["emoji"]} <b>{p["name"]}</b>{active}\n'
-            f'   ⚡ <code>{p["nox_min"]}–{p["nox_max"]} Nox</code>/10мин  ·  '
+            f'\n{pickaxe_icon()} <b>{p["name"]}</b>{active}\n'
+            f'   ⚡ <code>{p["nox_min"]}–{p["nox_max"]} Nox</code>/3мин  ·  '
             f'~<code>{avg}</code> avg  ·  ⏱ <code>{p["hours"]} ч</code>\n'
         )
     await call.message.edit_text(
         f'<tg-emoji emoji-id="{EMOJI_MINES}">⛏</tg-emoji> <b>Мои кирки</b>\n\n'
-        f'<blockquote>Текущая: {current["emoji"]} {current["name"]}</blockquote>'
+        f'<blockquote>Текущая: {pickaxe_icon()} {current["name"]}</blockquote>'
         f'{lines}',
         reply_markup=back_mine_keyboard()
     )
@@ -407,14 +413,14 @@ async def cb_mine_shop(call: CallbackQuery):
         avg   = round((p["nox_min"] + p["nox_max"]) / 2, 1)
         mark  = "✅" if p["id"] in data["owned"] else "🔒"
         lines += (
-            f'\n{mark} {p["emoji"]} <b>{p["name"]}</b>\n'
+            f'\n{mark} {pickaxe_icon()} <b>{p["name"]}</b>\n'
             f'   💵 <code>{p["price"]:,} Px</code>  ·  '
-            f'⚡ <code>{p["nox_min"]}–{p["nox_max"]} Nox</code>/10мин  ·  '
+            f'⚡ <code>{p["nox_min"]}–{p["nox_max"]} Nox</code>/3мин  ·  '
             f'~<code>{avg}</code> avg  ·  ⏱ <code>{p["hours"]} ч</code>\n'
         )
     await call.message.edit_text(
         f'<tg-emoji emoji-id="{EMOJI_MINES}">⛏</tg-emoji> <b>Магазин кирок</b> — {tiers.get(page, "")}\n\n'
-        f'<blockquote>1 Nox = <b>{NOX_TO_PX} Px</b>  ·  каждые <b>10 мин</b> капает порция Nox</blockquote>\n'
+        f'<blockquote>1 Nox = <b>{NOX_TO_PX} Px</b>  ·  каждые <b>3 мин</b> капает порция Nox</blockquote>\n'
         f'{lines}',
         reply_markup=shop_keyboard(page, data["owned"])
     )
@@ -440,7 +446,7 @@ async def cb_mine_buy(call: CallbackQuery):
             ); return
         spend_px_fn(uid, pickaxe["price"])
     data["owned"].add(pid)
-    await call.answer(f'✅ Куплено: {pickaxe["emoji"]} {pickaxe["name"]}!', show_alert=True)
+    await call.answer(f'✅ Куплено: {pickaxe_icon()} {pickaxe["name"]}!', show_alert=True)
     page = (pid - 1) // 5
     # обновляем магазин
     await cb_mine_shop.__wrapped__(call) if hasattr(cb_mine_shop, '__wrapped__') else None
@@ -452,14 +458,14 @@ async def cb_mine_buy(call: CallbackQuery):
         avg  = round((p["nox_min"] + p["nox_max"]) / 2, 1)
         mark = "✅" if p["id"] in data["owned"] else "🔒"
         lines += (
-            f'\n{mark} {p["emoji"]} <b>{p["name"]}</b>\n'
+            f'\n{mark} {pickaxe_icon()} <b>{p["name"]}</b>\n'
             f'   💵 <code>{p["price"]:,} Px</code>  ·  '
-            f'⚡ <code>{p["nox_min"]}–{p["nox_max"]} Nox</code>/10мин  ·  '
+            f'⚡ <code>{p["nox_min"]}–{p["nox_max"]} Nox</code>/3мин  ·  '
             f'~<code>{round((p["nox_min"]+p["nox_max"])/2,1)}</code> avg  ·  ⏱ <code>{p["hours"]} ч</code>\n'
         )
     await call.message.edit_text(
         f'<tg-emoji emoji-id="{EMOJI_MINES}">⛏</tg-emoji> <b>Магазин кирок</b> — {tiers.get(page, "")}\n\n'
-        f'<blockquote>1 Nox = <b>{NOX_TO_PX} Px</b>  ·  каждые <b>10 мин</b> капает порция Nox</blockquote>\n'
+        f'<blockquote>1 Nox = <b>{NOX_TO_PX} Px</b>  ·  каждые <b>3 мин</b> капает порция Nox</blockquote>\n'
         f'{lines}',
         reply_markup=shop_keyboard(page, data["owned"])
     )
