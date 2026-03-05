@@ -1,8 +1,9 @@
 import asyncio
 import random
 from datetime import datetime, timedelta
-from aiogram import Router, F
+from aiogram import Router, F, Bot
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.exceptions import TelegramBadRequest
 
 # ─────────────────────────────────────────
 #  Инжектируемые функции из bot_menu.py
@@ -22,60 +23,54 @@ EMOJI_MINES    = "5393480373944459905"
 EMOJI_GOLD     = "5278467510604160626"
 EMOJI_BACK     = "5906771962734057347"
 EMOJI_WALLET   = "5443127283898405358"
-EMOJI_SELL     = "5312441427764989435"   # продать
-EMOJI_BAG      = "5278702045883292456"   # мои кирки
-EMOJI_SHOP     = "5312361253610475399"   # магазин
-EMOJI_PROGRESS = "5231200819986047254"   # прогресс
-EMOJI_REFRESH  = "5402186569006210455"   # обновить
-EMOJI_OWNED    = "5206607081334906820"   # куплено (галка)
-EMOJI_LOCKED   = "5210952531676504517"   # заблокировано
+EMOJI_SELL     = "5312441427764989435"
+EMOJI_BAG      = "5278702045883292456"
+EMOJI_SHOP     = "5312361253610475399"
+EMOJI_PROGRESS = "5231200819986047254"
+EMOJI_REFRESH  = "5402186569006210455"
+EMOJI_OWNED    = "5206607081334906820"
+EMOJI_LOCKED   = "5210952531676504517"
 
-NOX_TO_PX        = 5   # 1 Nox = 15 Px
-TICK_MINUTES     = 3    # каждые 3 минуты начисляется порция
-REFRESH_SECONDS  = 120
+NOX_TO_PX       = 5
+TICK_MINUTES    = 3
+REFRESH_SECONDS = 120
 
-# ─────────────────────────────────────────
-#  15 кирок  (nox_min, nox_max — за 10 мин)
-# ─────────────────────────────────────────
-# PICKAXE_EMOJI_ID — замените на свой custom emoji ID кирки
 PICKAXE_EMOJI_ID = "5197371802136892976"
 
 def pickaxe_icon() -> str:
     return f'<tg-emoji emoji-id="{PICKAXE_EMOJI_ID}">⛏</tg-emoji>'
 
 PICKAXES = [
-    {"id":  1, "name": "Кирка-I",  "price":      0, "nox_min":   5, "nox_max":  15, "hours":  3},
-    {"id":  2, "name": "Кирка-II",  "price":    150, "nox_min":  10, "nox_max":  22, "hours":  4},
+    {"id":  1, "name": "Кирка-I",    "price":      0, "nox_min":   5, "nox_max":  15, "hours":  3},
+    {"id":  2, "name": "Кирка-II",   "price":    150, "nox_min":  10, "nox_max":  22, "hours":  4},
     {"id":  3, "name": "Кирка-III",  "price":    350, "nox_min":  15, "nox_max":  30, "hours":  5},
-    {"id":  4, "name": "Кирка-IV",  "price":    700, "nox_min":  22, "nox_max":  42, "hours":  6},
-    {"id":  5, "name": "Кирка-V",  "price":   1200, "nox_min":  30, "nox_max":  55, "hours":  8},
-    {"id":  6, "name": "Кирка-VI",  "price":   2000, "nox_min":  40, "nox_max":  70, "hours": 10},
+    {"id":  4, "name": "Кирка-IV",   "price":    700, "nox_min":  22, "nox_max":  42, "hours":  6},
+    {"id":  5, "name": "Кирка-V",    "price":   1200, "nox_min":  30, "nox_max":  55, "hours":  8},
+    {"id":  6, "name": "Кирка-VI",   "price":   2000, "nox_min":  40, "nox_max":  70, "hours": 10},
     {"id":  7, "name": "Кирка-VII",  "price":   3500, "nox_min":  55, "nox_max":  90, "hours": 12},
-    {"id":  8, "name": "Кирка-VIII",  "price":   5500, "nox_min":  70, "nox_max": 115, "hours": 16},
-    {"id":  9, "name": "Кирка-IX",  "price":   8000, "nox_min":  90, "nox_max": 145, "hours": 20},
-    {"id": 10, "name": "Кирка-X", "price":  12000, "nox_min": 115, "nox_max": 180, "hours": 24},
-    {"id": 11, "name": "Кирка-XI", "price":  18000, "nox_min": 145, "nox_max": 220, "hours": 30},
-    {"id": 12, "name": "Кирка-XII", "price":  26000, "nox_min": 180, "nox_max": 270, "hours": 36},
+    {"id":  8, "name": "Кирка-VIII", "price":   5500, "nox_min":  70, "nox_max": 115, "hours": 16},
+    {"id":  9, "name": "Кирка-IX",   "price":   8000, "nox_min":  90, "nox_max": 145, "hours": 20},
+    {"id": 10, "name": "Кирка-X",    "price":  12000, "nox_min": 115, "nox_max": 180, "hours": 24},
+    {"id": 11, "name": "Кирка-XI",   "price":  18000, "nox_min": 145, "nox_max": 220, "hours": 30},
+    {"id": 12, "name": "Кирка-XII",  "price":  26000, "nox_min": 180, "nox_max": 270, "hours": 36},
     {"id": 13, "name": "Кирка-XIII", "price":  40000, "nox_min": 220, "nox_max": 340, "hours": 48},
-    {"id": 14, "name": "Кирка-XIV", "price":  60000, "nox_min": 270, "nox_max": 420, "hours": 60},
-    {"id": 15, "name": "Кирка-XV", "price":  99999, "nox_min": 340, "nox_max": 530, "hours": 72},
+    {"id": 14, "name": "Кирка-XIV",  "price":  60000, "nox_min": 270, "nox_max": 420, "hours": 60},
+    {"id": 15, "name": "Кирка-XV",   "price":  99999, "nox_min": 340, "nox_max": 530, "hours": 72},
 ]
 PICKAXE_BY_ID = {p["id"]: p for p in PICKAXES}
 
 # ─────────────────────────────────────────
 #  In-memory БД шахты
 # ─────────────────────────────────────────
-# mine_data[uid] = {
-#   nox: float            — готовый баланс (можно продать)
-#   pickaxe_id: int
-#   owned: set[int]
-#   mining_start: datetime | None
-#   mining_end:   datetime | None
-#   ticks_paid:   int      — сколько тиков уже начислено
-#   accumulated:  float    — накоплено за текущий сеанс (ещё не в nox)
-# }
 mine_data: dict[int, dict] = {}
 
+# FIX: объявлены, чтобы watchdog не падал с NameError
+_bot_ref: Bot | None = None
+progress_watchers: dict[int, tuple[int, int]] = {}  # uid -> (chat_id, msg_id)
+
+def set_bot_ref(bot: Bot):
+    global _bot_ref
+    _bot_ref = bot
 
 
 def get_mine_user(uid: int) -> dict:
@@ -96,7 +91,6 @@ def get_mine_user(uid: int) -> dict:
 #  Бизнес-логика
 # ─────────────────────────────────────────
 def calc_ticks(data: dict) -> int:
-    """Сколько 10-минутных тиков прошло с начала."""
     if not data["mining_start"]:
         return 0
     now     = datetime.now()
@@ -104,8 +98,7 @@ def calc_ticks(data: dict) -> int:
     elapsed = (min(now, end) - data["mining_start"]).total_seconds()
     return int(elapsed / 60 / TICK_MINUTES)
 
-def apply_new_ticks(data: dict, pickaxe: dict):
-    """Начисляет новые тики в accumulated."""
+def apply_new_ticks(data: dict, pickaxe: dict) -> float:
     total_ticks = calc_ticks(data)
     new_ticks   = total_ticks - data["ticks_paid"]
     if new_ticks <= 0:
@@ -114,12 +107,11 @@ def apply_new_ticks(data: dict, pickaxe: dict):
         round(random.uniform(pickaxe["nox_min"], pickaxe["nox_max"]), 2)
         for _ in range(new_ticks)
     )
-    data["accumulated"]  += earned
-    data["ticks_paid"]   += new_ticks
+    data["accumulated"] += earned
+    data["ticks_paid"]  += new_ticks
     return earned
 
 def finalize_mining(data: dict, pickaxe: dict):
-    """Завершает сеанс — переносит accumulated → nox."""
     apply_new_ticks(data, pickaxe)
     data["nox"]          += data["accumulated"]
     data["accumulated"]   = 0.0
@@ -191,7 +183,7 @@ def shop_keyboard(page: int, owned: set) -> InlineKeyboardMarkup:
 def pick_select_keyboard(owned: set) -> InlineKeyboardMarkup:
     rows = []
     for pid in sorted(owned):
-        p = PICKAXE_BY_ID[pid]
+        p   = PICKAXE_BY_ID[pid]
         avg = round((p["nox_min"] + p["nox_max"]) / 2, 1)
         rows.append([InlineKeyboardButton(
             text=f"{p['name']}  ·  ~{avg} Nox/3мин  ·  {p['hours']}ч",
@@ -217,13 +209,13 @@ def mine_main_text(uid: int) -> str:
     if is_done(data):
         finalize_mining(data, pickaxe)
 
-    nox_px  = round(data["nox"] * NOX_TO_PX, 2)
-    max_ticks = int(pickaxe["hours"] * 60 / TICK_MINUTES)
+    nox_px       = round(data["nox"] * NOX_TO_PX, 2)
+    max_ticks    = int(pickaxe["hours"] * 60 / TICK_MINUTES)
     avg_per_tick = round((pickaxe["nox_min"] + pickaxe["nox_max"]) / 2, 1)
     avg_total    = round(avg_per_tick * max_ticks, 1)
 
     if data["mining_end"]:
-        tl = time_left_str(data["mining_end"])
+        tl     = time_left_str(data["mining_end"])
         status = (
             f'\n<blockquote>'
             f'<tg-emoji emoji-id="5906852613629941703">⚡</tg-emoji>  <b>Идёт копание</b>  —  осталось <code>{tl}</code>\n'
@@ -323,7 +315,8 @@ async def cb_mine_progress(call: CallbackQuery):
     if not data["mining_end"]:
         await call.answer("⛏ Копание не запущено!", show_alert=True); return
 
-    # Регистрируем это сообщение для авто-обновления
+    # FIX: регистрируем сообщение для авто-обновления watchdog'ом
+    progress_watchers[uid] = (call.message.chat.id, call.message.message_id)
 
     await call.message.edit_text(progress_text(uid), reply_markup=progress_keyboard())
     if set_owner_fn:
@@ -353,18 +346,29 @@ async def cb_mine_start_pick(call: CallbackQuery):
 async def cb_mine_equip(call: CallbackQuery):
     if is_owner_fn and not is_owner_fn(call.message.message_id, call.from_user.id):
         await call.answer("🚫 Это не ваша кнопка!", show_alert=True); return
-    pid  = int(call.data.split("_")[2])
+
+    # FIX: безопасный парсинг callback_data
+    parts = call.data.split("_")
+    if len(parts) < 3 or not parts[2].isdigit():
+        await call.answer("❌ Неверные данные!", show_alert=True); return
+    pid = int(parts[2])
+
+    if pid not in PICKAXE_BY_ID:
+        await call.answer("❌ Кирка не найдена!", show_alert=True); return
+
     data = get_mine_user(call.from_user.id)
     if pid not in data["owned"]:
         await call.answer("❌ У вас нет этой кирки!", show_alert=True); return
     if data["mining_end"]:
         await call.answer("⛏ Копание уже идёт!", show_alert=True); return
-    pickaxe             = PICKAXE_BY_ID[pid]
-    data["pickaxe_id"]  = pid
-    data["mining_start"]= datetime.now()
-    data["mining_end"]  = datetime.now() + timedelta(hours=pickaxe["hours"])
-    data["ticks_paid"]  = 0
-    data["accumulated"] = 0.0
+
+    pickaxe              = PICKAXE_BY_ID[pid]
+    data["pickaxe_id"]   = pid
+    data["mining_start"] = datetime.now()
+    data["mining_end"]   = datetime.now() + timedelta(hours=pickaxe["hours"])
+    data["ticks_paid"]   = 0
+    data["accumulated"]  = 0.0
+
     await call.message.edit_text(
         f'<tg-emoji emoji-id="5197371802136892976">⛏</tg-emoji> <b>Копание началось!</b>\n\n'
         f'<blockquote>'
@@ -412,8 +416,15 @@ async def cb_mine_owned(call: CallbackQuery):
 async def cb_mine_shop(call: CallbackQuery):
     if is_owner_fn and not is_owner_fn(call.message.message_id, call.from_user.id):
         await call.answer("🚫 Это не ваша кнопка!", show_alert=True); return
-    page = int(call.data.split("_")[2])
-    data = get_mine_user(call.from_user.id)
+
+    # FIX: безопасный парсинг страницы
+    parts = call.data.split("_")
+    if len(parts) < 3 or not parts[2].isdigit():
+        await call.answer("❌ Неверные данные!", show_alert=True); return
+    page = int(parts[2])
+    page = max(0, min(page, (len(PICKAXES) - 1) // 5))  # клампинг страницы
+
+    data  = get_mine_user(call.from_user.id)
     tiers = {0: "1", 1: "2", 2: "3", 3: "4", 4: "5"}
     items = PICKAXES[page * 5:(page + 1) * 5]
     lines = ""
@@ -439,12 +450,23 @@ async def cb_mine_shop(call: CallbackQuery):
 async def cb_mine_buy(call: CallbackQuery):
     if is_owner_fn and not is_owner_fn(call.message.message_id, call.from_user.id):
         await call.answer("🚫 Это не ваша кнопка!", show_alert=True); return
-    pid     = int(call.data.split("_")[2])
+
+    # FIX: безопасный парсинг
+    parts = call.data.split("_")
+    if len(parts) < 3 or not parts[2].isdigit():
+        await call.answer("❌ Неверные данные!", show_alert=True); return
+    pid = int(parts[2])
+
+    if pid not in PICKAXE_BY_ID:
+        await call.answer("❌ Кирка не найдена!", show_alert=True); return
+
     pickaxe = PICKAXE_BY_ID[pid]
     uid     = call.from_user.id
     data    = get_mine_user(uid)
+
     if pid in data["owned"]:
         await call.answer("✅ У вас уже есть эта кирка!", show_alert=True); return
+
     if get_px_fn and spend_px_fn:
         user_px = get_px_fn(uid)
         if user_px < pickaxe["price"]:
@@ -453,12 +475,12 @@ async def cb_mine_buy(call: CallbackQuery):
                 show_alert=True
             ); return
         spend_px_fn(uid, pickaxe["price"])
+
     data["owned"].add(pid)
-    await call.answer(f'✅ Куплено: {pickaxe_icon()} {pickaxe["name"]}!', show_alert=True)
-    page = (pid - 1) // 5
-    # обновляем магазин
-    await cb_mine_shop.__wrapped__(call) if hasattr(cb_mine_shop, '__wrapped__') else None
-    # просто редактируем снова
+    await call.answer(f'✅ Куплено: {pickaxe["name"]}!', show_alert=True)
+
+    # FIX: убран мёртвый код с __wrapped__, просто обновляем магазин напрямую
+    page  = (pid - 1) // 5
     tiers = {0: "1", 1: "2", 2: "3", 3: "4", 4: "5"}
     items = PICKAXES[page * 5:(page + 1) * 5]
     lines = ""
@@ -469,7 +491,7 @@ async def cb_mine_buy(call: CallbackQuery):
             f'\n{mark} {pickaxe_icon()} <b>{p["name"]}</b>\n'
             f'    <code>{p["price"]:,} Px</code>  ·  '
             f'⚡ <code>{p["nox_min"]}–{p["nox_max"]} Nox</code>/3мин  ·  '
-            f'~<code>{round((p["nox_min"]+p["nox_max"])/2,1)}</code> avg  ·  ⏱ <code>{p["hours"]} ч</code>\n'
+            f'~<code>{round((p["nox_min"]+p["nox_max"])/2, 1)}</code> avg  ·  ⏱ <code>{p["hours"]} ч</code>\n'
         )
     await call.message.edit_text(
         f'<tg-emoji emoji-id="5197371802136892976">⛏</tg-emoji> <b>Магазин кирок</b> — {tiers.get(page, "")}\n\n'
@@ -487,11 +509,20 @@ async def cb_mine_sell(call: CallbackQuery):
     data = get_mine_user(uid)
     if data["nox"] <= 0:
         await call.answer("❌ Нет Nox для продажи!", show_alert=True); return
+
+    # FIX: финализируем накопленное перед продажей, чтобы не терять текущий прогресс
+    pickaxe = PICKAXE_BY_ID[data["pickaxe_id"]]
+    if data["mining_end"]:
+        apply_new_ticks(data, pickaxe)
+        data["nox"]         += data["accumulated"]
+        data["accumulated"]  = 0.0
+
     nox_amount = data["nox"]
     px_earned  = round(nox_amount * NOX_TO_PX, 2)
     if add_px_fn:
         add_px_fn(uid, px_earned)
     data["nox"] = 0.0
+
     await call.message.edit_text(
         f'<tg-emoji emoji-id="{EMOJI_GOLD}">💰</tg-emoji> <b>Продажа Nox</b>\n\n'
         f'<blockquote>'
@@ -512,7 +543,7 @@ async def cb_mine_sell(call: CallbackQuery):
 
 async def mine_watchdog():
     while True:
-        await asyncio.sleep(REFRESH_SECONDS)  # каждые 2 минуты
+        await asyncio.sleep(REFRESH_SECONDS)
         now = datetime.now()
 
         for uid, data in list(mine_data.items()):
@@ -521,15 +552,15 @@ async def mine_watchdog():
 
             pickaxe = PICKAXE_BY_ID[data["pickaxe_id"]]
 
-            # Финализируем если время вышло
             if now >= data["mining_end"]:
                 finalize_mining(data, pickaxe)
+                # FIX: чистим watcher после завершения
+                progress_watchers.pop(uid, None)
                 continue
 
-            # Начисляем новые тики
             apply_new_ticks(data, pickaxe)
 
-            # Обновляем прогресс-сообщение если есть
+            # FIX: _bot_ref и progress_watchers теперь определены, ошибки нет
             if uid in progress_watchers and _bot_ref:
                 chat_id, msg_id = progress_watchers[uid]
                 try:
@@ -541,4 +572,4 @@ async def mine_watchdog():
                         parse_mode="HTML"
                     )
                 except TelegramBadRequest:
-                    pass  # сообщение не изменилось или удалено
+                    pass
