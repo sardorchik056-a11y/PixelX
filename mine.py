@@ -32,7 +32,7 @@ EMOJI_OWNED    = "5206607081334906820"
 EMOJI_LOCKED   = "5210952531676504517"
 
 NOX_TO_PX       = 5
-TICK_MINUTES    = 3
+TICK_MINUTES    = 5
 REFRESH_SECONDS = 120
 
 PICKAXE_EMOJI_ID = "5197371802136892976"
@@ -42,20 +42,20 @@ def pickaxe_icon() -> str:
 
 PICKAXES = [
     {"id":  1, "name": "Кирка-I",    "price":      0, "nox_min":   5, "nox_max":  15, "hours":  3},
-    {"id":  2, "name": "Кирка-II",   "price":    150, "nox_min":  10, "nox_max":  22, "hours":  4},
-    {"id":  3, "name": "Кирка-III",  "price":    350, "nox_min":  15, "nox_max":  30, "hours":  5},
-    {"id":  4, "name": "Кирка-IV",   "price":    700, "nox_min":  22, "nox_max":  42, "hours":  6},
-    {"id":  5, "name": "Кирка-V",    "price":   1200, "nox_min":  30, "nox_max":  55, "hours":  8},
-    {"id":  6, "name": "Кирка-VI",   "price":   2000, "nox_min":  40, "nox_max":  70, "hours": 10},
-    {"id":  7, "name": "Кирка-VII",  "price":   3500, "nox_min":  55, "nox_max":  90, "hours": 12},
-    {"id":  8, "name": "Кирка-VIII", "price":   5500, "nox_min":  70, "nox_max": 115, "hours": 16},
-    {"id":  9, "name": "Кирка-IX",   "price":   8000, "nox_min":  90, "nox_max": 145, "hours": 20},
-    {"id": 10, "name": "Кирка-X",    "price":  12000, "nox_min": 115, "nox_max": 180, "hours": 24},
-    {"id": 11, "name": "Кирка-XI",   "price":  18000, "nox_min": 145, "nox_max": 220, "hours": 30},
-    {"id": 12, "name": "Кирка-XII",  "price":  26000, "nox_min": 180, "nox_max": 270, "hours": 36},
-    {"id": 13, "name": "Кирка-XIII", "price":  40000, "nox_min": 220, "nox_max": 340, "hours": 48},
-    {"id": 14, "name": "Кирка-XIV",  "price":  60000, "nox_min": 270, "nox_max": 420, "hours": 60},
-    {"id": 15, "name": "Кирка-XV",   "price":  99999, "nox_min": 340, "nox_max": 530, "hours": 72},
+    {"id":  2, "name": "Кирка-II",   "price":    2500, "nox_min":  10, "nox_max":  22, "hours":  4},
+    {"id":  3, "name": "Кирка-III",  "price":    5000, "nox_min":  17, "nox_max":  30, "hours":  5},
+    {"id":  4, "name": "Кирка-IV",   "price":    12000, "nox_min":  29, "nox_max":  50, "hours":  6},
+    {"id":  5, "name": "Кирка-V",    "price":   25000, "nox_min":  50, "nox_max":  85, "hours":  8},
+    {"id":  6, "name": "Кирка-VI",   "price":   55000, "nox_min":  70, "nox_max":  110, "hours": 10},
+    {"id":  7, "name": "Кирка-VII",  "price":   135000, "nox_min":  155, "nox_max":  290, "hours": 12},
+    {"id":  8, "name": "Кирка-VIII", "price":   355500, "nox_min":  270, "nox_max": 415, "hours": 16},
+    {"id":  9, "name": "Кирка-IX",   "price":   800000, "nox_min":  490, "nox_max": 645, "hours": 20},
+    {"id": 10, "name": "Кирка-X",    "price":  1200000, "nox_min": 565, "nox_max": 780, "hours": 24},
+    {"id": 11, "name": "Кирка-XI",   "price":  1800000, "nox_min": 645, "nox_max": 820, "hours": 30},
+    {"id": 12, "name": "Кирка-XII",  "price":  2600000, "nox_min": 780, "nox_max": 970, "hours": 36},
+    {"id": 13, "name": "Кирка-XIII", "price":  4000000, "nox_min": 920, "nox_max": 1340, "hours": 48},
+    {"id": 14, "name": "Кирка-XIV",  "price":  6000000, "nox_min": 1270, "nox_max": 1620, "hours": 60},
+    {"id": 15, "name": "Кирка-XV",   "price":  9999999, "nox_min": 1940, "nox_max": 2530, "hours": 72},
 ]
 PICKAXE_BY_ID = {p["id"]: p for p in PICKAXES}
 
@@ -252,7 +252,7 @@ def progress_text(uid: int) -> str:
     if is_done(data):
         finalize_mining(data, pickaxe)
         return (
-            f'<tg-emoji emoji-id="{EMOJI_MINES}">⛏</tg-emoji> <b>Копание завершено!</b>\n\n'
+            f'<tg-emoji emoji-id="5262844652964303985">⛏</tg-emoji> <b>Копание завершено!</b>\n\n'
             f'<blockquote>'
             f' <tg-emoji emoji-id="5429651785352501917">💰</tg-emoji> Nox зачислен в баланс шахты\n'
             f'<tg-emoji emoji-id="5278467510604160626">💰</tg-emoji>  <b>Баланс:</b> <code>{data["nox"]:.2f} Nox</code>'
@@ -280,7 +280,7 @@ def progress_text(uid: int) -> str:
         f'⏳  <b>До конца:</b> <code>{tl}</code>'
         f'</blockquote>\n\n'
         f'<blockquote>'
-        f'🕐  <i>Обновлено: {now_str}  ·</i>'
+        f'🕐  <i>Обновлено: {now_str}  используйте кнопку ниже·</i>'
         f'</blockquote>'
     )
 
@@ -332,10 +332,10 @@ async def cb_mine_start_pick(call: CallbackQuery):
     if data["mining_end"]:
         await call.answer("⛏ Копание уже идёт!", show_alert=True); return
     await call.message.edit_text(
-        f'<tg-emoji emoji-id="{EMOJI_MINES}">⛏</tg-emoji> <b>Выберите кирку</b>\n\n'
+        f'<tg-emoji emoji-id="5262844652964303985">⛏</tg-emoji> <b>Выберите кирку</b>\n\n'
         f'<blockquote>'
         f'Nox зачислится автоматически по окончании цикла.\n'
-        f'Прогресс можно отслеживать каждые 2 минуты.'
+        f'Прогресс можно отслеживать каждые 2 минуты!'
         f'</blockquote>',
         reply_markup=pick_select_keyboard(data["owned"])
     )
@@ -404,7 +404,7 @@ async def cb_mine_owned(call: CallbackQuery):
             f'~<code>{avg}</code> avg  ·  ⏱ <code>{p["hours"]} ч</code>\n'
         )
     await call.message.edit_text(
-        f'<tg-emoji emoji-id="{EMOJI_MINES}">⛏</tg-emoji> <b>Мои кирки</b>\n\n'
+        f'<tg-emoji emoji-id="5262844652964303985">⛏</tg-emoji> <b>Мои кирки</b>\n\n'
         f'<blockquote>Текущая: {pickaxe_icon()} {current["name"]}</blockquote>'
         f'{lines}',
         reply_markup=back_mine_keyboard()
