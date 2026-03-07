@@ -59,6 +59,10 @@ EMOJI_WELCOME     = "5199885118214255386"
 EMOJI_BIRJ        = "5402186569006210455"
 EMOJI_MINE        = "5197371802136892976"
 EMOJI_BONUS       = "5305699699204837855"
+# ── О проекте — замени на свои ID ──
+EMOJI_CHAT        = "REPLACE_EMOJI_ID_CHAT"
+EMOJI_NEWS        = "REPLACE_EMOJI_ID_NEWS"
+EMOJI_SUPPORT     = "REPLACE_EMOJI_ID_SUPPORT"
 
 # ─────────────────────────────────────────
 #  Owner guard
@@ -152,6 +156,21 @@ def profile_keyboard() -> InlineKeyboardMarkup:
         ],
     ])
 
+def about_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="Чат",       url="https://t.me/REPLACE_CHAT_LINK",    icon_custom_emoji_id=EMOJI_CHAT),
+            InlineKeyboardButton(text="Новости",   url="https://t.me/REPLACE_NEWS_LINK",    icon_custom_emoji_id=EMOJI_NEWS),
+            InlineKeyboardButton(text="Поддержка", url="https://t.me/REPLACE_SUPPORT_LINK", icon_custom_emoji_id=EMOJI_SUPPORT),
+        ],
+        [
+            InlineKeyboardButton(text="Инструкция", callback_data="instruction", icon_custom_emoji_id=EMOJI_INSTRUCT),
+        ],
+        [
+            InlineKeyboardButton(text="Назад", callback_data="main_menu", icon_custom_emoji_id=EMOJI_BACK),
+        ],
+    ])
+
 # ─────────────────────────────────────────
 #  Тексты
 # ─────────────────────────────────────────
@@ -233,7 +252,6 @@ DEV_SECTIONS = {
     "leaders":     "Лидеры",
     "exchange":    "Биржа",
     "promocodes":  "Промокоды",
-    "about":       "О проекте",
     "instruction": "Инструкция",
 }
 
@@ -314,6 +332,14 @@ async def cb_buy_px(call: CallbackQuery):
     if not is_owner(call.message.message_id, call.from_user.id):
         await call.answer("🚫 Это не ваша кнопка!", show_alert=True); return
     await call.message.edit_text(dev_text("Купить Px"), reply_markup=back_profile_keyboard())
+    set_owner(call.message.message_id, call.from_user.id)
+    await call.answer()
+
+@dp.callback_query(F.data == "about")
+async def cb_about(call: CallbackQuery):
+    if not is_owner(call.message.message_id, call.from_user.id):
+        await call.answer("🚫 Это не ваша кнопка!", show_alert=True); return
+    await call.message.edit_text(dev_text("О проекте"), reply_markup=about_keyboard())
     set_owner(call.message.message_id, call.from_user.id)
     await call.answer()
 
