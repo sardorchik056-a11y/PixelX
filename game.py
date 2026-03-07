@@ -27,20 +27,15 @@ from database import (
     db_record_game_result,
 )
 
-# ── Реферальная комиссия (опционально) ──────────────────────────────────────
-try:
-    from referrals import notify_referrer_commission
-except ImportError:
-    async def notify_referrer_commission(user_id: int, bet_amount: float):
-        pass
+
 
 logging.basicConfig(level=logging.INFO)
 
 # ─────────────────────────────────────────
 #  Конфигурация
 # ─────────────────────────────────────────
-MIN_BET            = 1.0
-MAX_BET            = 10_000.0
+MIN_BET            = 10.0
+MAX_BET            = 100_000_000.0
 RATE_LIMIT_SECONDS = 3
 
 # ─────────────────────────────────────────
@@ -272,11 +267,9 @@ async def _play_single(chat_id: int, uid: int, name: str, amount: float,
             winnings = round(amount * cfg['multiplier'], 2)
             db_add_px(uid, winnings)
             db_record_game_result(uid, amount, winnings)
-            asyncio.create_task(notify_referrer_commission(uid, amount))
             await dice_msg.reply(WIN_TEXT.format(name=name, winnings=winnings), parse_mode='HTML')
         else:
             db_record_game_result(uid, amount, 0.0)
-            asyncio.create_task(notify_referrer_commission(uid, amount))
             await dice_msg.reply(LOSE_TEXT.format(name=name), parse_mode='HTML')
 
     except Exception as e:
@@ -307,11 +300,9 @@ async def _play_double_dice(chat_id: int, uid: int, name: str, amount: float,
             winnings = round(amount * cfg['multiplier'], 2)
             db_add_px(uid, winnings)
             db_record_game_result(uid, amount, winnings)
-            asyncio.create_task(notify_referrer_commission(uid, amount))
             await dice2.reply(WIN_TEXT.format(name=name, winnings=winnings), parse_mode='HTML')
         else:
             db_record_game_result(uid, amount, 0.0)
-            asyncio.create_task(notify_referrer_commission(uid, amount))
             await dice2.reply(LOSE_TEXT.format(name=name), parse_mode='HTML')
 
     except Exception as e:
@@ -361,11 +352,9 @@ async def _play_bowling_vs(chat_id: int, uid: int, name: str, amount: float,
             winnings = round(amount * cfg['multiplier'], 2)
             db_add_px(uid, winnings)
             db_record_game_result(uid, amount, winnings)
-            asyncio.create_task(notify_referrer_commission(uid, amount))
             await b_roll.reply(WIN_TEXT.format(name=name, winnings=winnings), parse_mode='HTML')
         else:
             db_record_game_result(uid, amount, 0.0)
-            asyncio.create_task(notify_referrer_commission(uid, amount))
             await b_roll.reply(LOSE_TEXT.format(name=name), parse_mode='HTML')
 
     except Exception as e:
@@ -456,7 +445,7 @@ def games_keyboard() -> InlineKeyboardMarkup:
 GAMES_TEXT = (
     "<b>🎮 Игры</b>\n\n"
     "<blockquote>Выберите игру и сделайте ставку.\n"
-    "Минимум: <code>1 Px</code> | Максимум: <code>10 000 Px</code></blockquote>\n\n"
+    "Минимум: <code>10 Px</code> | Максимум: <code>100 000 000 Px</code></blockquote>\n\n"
     "<blockquote><b>Текстовые команды:</b>\n"
     "  <code>куб чет 100</code>\n"
     "  <code>баскет гол 50</code>\n"
