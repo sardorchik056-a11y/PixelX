@@ -61,7 +61,7 @@ EMOJI_MINE        = "5197371802136892976"
 EMOJI_BONUS       = "5305699699204837855"
 # ── О проекте — замени на свои ID ──
 EMOJI_CHAT        = "5303138782004924588"
-EMOJI_NEWS        = "5424818078833715060"
+EMOJI_NEWS        = "5201691993775818138"
 EMOJI_SUPPORT     = "5907025791006283345"
 
 # ─────────────────────────────────────────
@@ -335,11 +335,22 @@ async def cb_buy_px(call: CallbackQuery):
     set_owner(call.message.message_id, call.from_user.id)
     await call.answer()
 
+ABOUT_TEXT = (
+    f'<tg-emoji emoji-id="{EMOJI_ABOUT}">📋</tg-emoji> <b>О проекте</b>\n\n'
+    f'<blockquote>'
+    f'<b>PixelX</b> — честная игровая платформа в Telegram.\n'
+    f'Прозрачные правила, реальные шансы на победу, без скрытых условий.'
+    f'</blockquote>\n\n'
+    f'<blockquote>'
+    f'Присоединяйся к сообществу, следи за новостями и обращайся в поддержку — мы всегда на связи!'
+    f'</blockquote>'
+)
+
 @dp.callback_query(F.data == "about")
 async def cb_about(call: CallbackQuery):
     if not is_owner(call.message.message_id, call.from_user.id):
         await call.answer("🚫 Это не ваша кнопка!", show_alert=True); return
-    await call.message.edit_text(dev_text("О проекте"), reply_markup=about_keyboard())
+    await call.message.edit_text(ABOUT_TEXT, reply_markup=about_keyboard())
     set_owner(call.message.message_id, call.from_user.id)
     await call.answer()
 
