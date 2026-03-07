@@ -156,10 +156,16 @@ def profile_keyboard() -> InlineKeyboardMarkup:
 #  Тексты
 # ─────────────────────────────────────────
 MAIN_TEXT = (
+    f'<tg-emoji emoji-id="{EMOJI_WELCOME}">👋</tg-emoji> <b>Добро пожаловать в PixelX!</b>\n\n'
     f'<blockquote>'
-    f'<tg-emoji emoji-id="{EMOJI_WELCOME}">👋</tg-emoji> <b>Добро пожаловать!</b>\n\n'
+    f'🛡 Честные игры — прозрачные правила и реальные шансы на победу. '
+    f'Без скрытых условий, всё открыто и по-настоящему честно.'
+    f'</blockquote>\n\n'
+    f'<blockquote>'
+    f'🏆 Испытай свои навыки в мини-играх, набирай очки, поднимайся в таблице лидеров '
+    f'и стань одним из лучших игроков PixelX.'
+    f'</blockquote>\n\n'
     f'🚀 Выберите раздел в меню ниже'
-    f'</blockquote>'
 )
 
 def dev_text(section: str) -> str:
