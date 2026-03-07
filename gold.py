@@ -3,8 +3,6 @@ gold.py — Золото (честная версия)
 ─────────────────────────────────────────────────────────────────
 Честность: на каждом уровне 1 бомба из 2 ячеек — позиция бомбы
 определяется ЗАРАНЕЕ при создании сессии (random.randint).
-Убран BOMB_CHANCE = 0.60 (нечестный фиксированный процент).
-Реальный шанс: ровно 50/50 на каждом уровне.
 ─────────────────────────────────────────────────────────────────
 """
 
@@ -52,13 +50,12 @@ CELL_FUTURE   = "🌑"
 
 # ── Конфигурация ───────────────────────────────────────────────────
 FLOORS             = 7
-CELLS              = 2   # 2 ячейки на уровне, 1 бомба → честный 50/50
+CELLS              = 2
 INACTIVITY_TIMEOUT = 300
 
 MIN_BET = 10.0
 MAX_BET = 100_000_000.0
 
-# Множители за каждый пройденный уровень
 GOLD_MULTIPLIERS = [1.9, 3.8, 7.6, 14.5, 29.9, 56.78, 116.84]
 
 # ── FSM ────────────────────────────────────────────────────────────
@@ -185,16 +182,12 @@ def _validate_bet(bet: float) -> str | None:
     return None
 
 
-# ── Создание сессии с PRE-PLACED бомбами ──────────────────────────
+# ── Создание сессии ────────────────────────────────────────────────
 def _create_session(bet: float, chat_id: int, owner_id: int = 0) -> dict:
-    """
-    Бомба на каждом уровне определяется ЗАРАНЕЕ — честный 50/50.
-    bomb_col = 0 или 1, выбирается случайно для каждого этажа.
-    """
     floors = []
     for _ in range(FLOORS):
         floors.append({
-            'bomb_col': random.randint(0, CELLS - 1),  # ← pre-placed, честный 50/50
+            'bomb_col': random.randint(0, CELLS - 1),
             'chosen':   None,
             'is_bomb':  None,
         })
@@ -418,7 +411,6 @@ async def gold_cell_handler(callback: CallbackQuery, state: FSMContext):
         floor_data = session['floors'][floor_idx]
         floor_data['chosen'] = col
 
-        # ── ЧЕСТНЫЙ РЕЗУЛЬТАТ: бомба была определена заранее ───────
         is_bomb = (col == floor_data['bomb_col'])
         floor_data['is_bomb'] = is_bomb
 
@@ -629,6 +621,66 @@ async def process_gold_bet(message: Message, state: FSMContext):
 
     sent = await message.answer(game_text(session), parse_mode=ParseMode.HTML,
                                 reply_markup=build_gold_keyboard(session))
+    session['message_id'] = sent.message_id
+    set_owner_fn(sent.message_id, user_id)
+    _game_board_owner[sent.message_id] = user_id
+    _start_timeout(user_id, message.bot)
+
+
+# ── Быстрая команда ────────────────────────────────────────────────
+# Форматы: золото 1000 | /золото 1000 | gold 1000 | /gold 1000
+# Молча игнорирует неверный формат, сумму, нехватку средств
+# Показывает ошибку только при активной игре
+
+_QUICK_GOLD_RE = re.compile(
+    r'^/?(?:золото|gold)\s+'
+    r'(\d+(?:[.,]\d+)?)'
+    r'\s*$',
+    re.IGNORECASE
+)
+
+
+@gold_router.message(F.text.regexp(r'^/?(?:золото|gold)\s+\S+', re.IGNORECASE))
+async def gold_quick_command(message: Message, state: FSMContext):
+    user_id = message.from_user.id
+    text    = (message.text or "").strip()
+
+    m = _QUICK_GOLD_RE.match(text)
+    if not m:
+        return
+
+    try:
+        bet = float(m.group(1).replace(',', '.'))
+    except ValueError:
+        return
+
+    if bet < MIN_BET or bet > MAX_BET:
+        return
+
+    if _has_active_game(user_id):
+        await message.answer(_active_game_error_text(_sessions[user_id]), parse_mode=ParseMode.HTML)
+        return
+
+    bet_lock = _get_bet_lock(user_id)
+    if bet_lock.locked():
+        return
+
+    async with bet_lock:
+        if _has_active_game(user_id):
+            await message.answer(_active_game_error_text(_sessions[user_id]), parse_mode=ParseMode.HTML)
+            return
+
+        if not db_try_spend_px(user_id, bet):
+            return
+
+        session = _create_session(bet, message.chat.id, user_id)
+        _sessions[user_id] = session
+        await state.set_state(GoldGame.playing)
+
+    sent = await message.answer(
+        game_text(session), parse_mode=ParseMode.HTML,
+        reply_markup=build_gold_keyboard(session)
+    )
     session['message_id'] = sent.message_id
     set_owner_fn(sent.message_id, user_id)
     _game_board_owner[sent.message_id] = user_id
