@@ -158,13 +158,14 @@ def profile_keyboard() -> InlineKeyboardMarkup:
 MAIN_TEXT = (
     f'<tg-emoji emoji-id="{EMOJI_WELCOME}">👋</tg-emoji> <b>Добро пожаловать в PixelX!</b>\n\n'
     f'<blockquote>'
-    f'<b><tg-emoji emoji-id="5197288647275071607">👋</tg-emoji> Честные игры — прозрачные правила и реальные шансы на победу.</b> '
-    f'<b>Без скрытых условий, всё открыто и по-настоящему честно.</b>'
+    f'<tg-emoji emoji-id="5197288647275071607">🛡</tg-emoji> <b>Честные игры — прозрачные правила и реальные шансы на победу.</b> '
+    f'Без скрытых условий, всё открыто и по-настоящему честно.'
     f'</blockquote>\n\n'
     f'<blockquote>'
-    f'<b><tg-emoji emoji-id="5262517101578443800">👋</tg-emoji> Испытай свои навыки в мини-играх, набирай очки, поднимайся в таблице лидеров</b> '
-    f'<b>и стань одним из лучших игроков PixelX.</b>'
+    f'<tg-emoji emoji-id="5262517101578443800">🏆</tg-emoji> <b>Испытай свои навыки в мини-играх, набирай очки, поднимайся в таблице лидеров</b> '
+    f'и стань одним из лучших игроков PixelX.'
     f'</blockquote>\n\n'
+    f'🚀 Выберите раздел в меню ниже'
 )
 
 def dev_text(section: str) -> str:
@@ -268,19 +269,15 @@ async def cmd_start(message: Message, command: CommandObject):
                         if registered:
                             rewarded_inviter = db_try_reward_referral(uid)
                             if rewarded_inviter:
-                                await message.answer(
-                                    f'<tg-emoji emoji-id="5222079954421818267">👥</tg-emoji> '
-                                    f'<b>Вы зашли по реферальной ссылке!</b>\n\n'
-                                    f'<blockquote>'
-                                    f'Пригласивший вас получил <code>{REFERRAL_REWARD_PX:,} Px</code> <tg-emoji emoji-id="5461151367559141950">👥</tg-emoji>'
-                                    f'</blockquote>'
-                                )
                                 try:
                                     await bot.send_message(
                                         chat_id=inviter_id,
                                         text=(
                                             f'<tg-emoji emoji-id="5222079954421818267">👥</tg-emoji> '
                                             f'<b>Новый реферал!</b>\n\n'
+                                            f'<blockquote>'
+                                            f'Начислено: <code>+{REFERRAL_REWARD_PX:,} Px</code>'
+                                            f'</blockquote>'
                                         )
                                     )
                                 except Exception:
