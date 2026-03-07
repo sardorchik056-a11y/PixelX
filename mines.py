@@ -705,7 +705,7 @@ _QUICK_MINES_RE = re.compile(
 )
 
 
-@mines_router.message(F.text.regexp(r'^/?(?:мины|mines)\s+\S+', re.IGNORECASE))
+@mines_router.message(F.text.regexp(r'(?i)^/?(?:мины|mines)\s+\S+'))
 async def mines_quick_command(message: Message, state: FSMContext):
     user_id = message.from_user.id
     text    = (message.text or "").strip()
