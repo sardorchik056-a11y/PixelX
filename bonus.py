@@ -24,6 +24,19 @@ DICE_REWARDS = {
 
 COOLDOWN_HOURS = 24
 
+# Кастомные emoji для каждой грани кубика — замени ID на свои
+FACE_EMOJI = {
+    1: "5382322671679708881",
+    2: "5381990043642502553",
+    3: "5381879959335738545",
+    4: "5382054253403577563",
+    5: "5391197405553107640",
+    6: "5390966190283694453",
+}
+
+def face_tg_emoji(face: int) -> str:
+    return f'<tg-emoji emoji-id="{FACE_EMOJI[face]}">🎲</tg-emoji>'
+
 # Множество uid кто прямо сейчас в процессе броска — защита от двойного нажатия
 _rolling: set[int] = set()
 
@@ -43,25 +56,18 @@ def _get_last_bonus(uid: int) -> datetime | None:
 
 
 def _try_claim_bonus(uid: int) -> bool:
-    """
-    Атомарно проверяет кулдаун и выставляет время одной транзакцией.
-    Возвращает True если бонус успешно занят, False если кулдаун ещё активен.
-    """
     from database import get_conn
     now = datetime.now()
     cooldown_boundary = (now - timedelta(hours=COOLDOWN_HOURS)).isoformat()
     now_iso = now.isoformat()
 
     with get_conn() as conn:
-        # Пытаемся вставить новую запись — только если её нет или last_bonus_at устарел
         cur = conn.execute("""
             INSERT INTO bonus (uid, last_bonus_at)
             VALUES (?, ?)
             ON CONFLICT(uid) DO UPDATE SET last_bonus_at = excluded.last_bonus_at
             WHERE last_bonus_at IS NULL OR last_bonus_at <= ?
         """, (uid, now_iso, cooldown_boundary))
-
-        # rowcount > 0 — запись обновилась, значит кулдаун прошёл и мы успешно заняли слот
         return cur.rowcount > 0
 
 
@@ -81,11 +87,10 @@ def _time_until_next(last: datetime) -> str:
 #  Тексты
 # ─────────────────────────────────────────
 def build_result_text(face: int, reward: int) -> str:
-    face_emojis = {1: "1️⃣", 2: "2️⃣", 3: "3️⃣", 4: "4️⃣", 5: "5️⃣", 6: "6️⃣"}
     return (
         f'<tg-emoji emoji-id="{EMOJI_BONUS}">🎁</tg-emoji> <b>Ежедневный бонус</b>\n\n'
         f'<blockquote>'
-        f'<tg-emoji emoji-id="5310278924616356636">💰</tg-emoji> Выпало: {face_emojis[face]}\n'
+        f'<tg-emoji emoji-id="5310278924616356636">💰</tg-emoji> Выпало: {face_tg_emoji(face)}\n'
         f'<tg-emoji emoji-id="5429651785352501917">💰</tg-emoji> Начислено: <code>+{reward:,} Px</code>'
         f'</blockquote>'
     )
@@ -110,22 +115,18 @@ async def cb_bonus(call: CallbackQuery):
 
     uid = call.from_user.id
 
-    # Защита 1: in-memory лок — если юзер уже в процессе броска, игнорируем
     if uid in _rolling:
         await call.answer("🎲 Подождите, кубик уже брошен!", show_alert=True)
         return
 
-    # Защита 2: атомарная проверка + запись кулдауна в БД одной транзакцией
     claimed = _try_claim_bonus(uid)
 
     if not claimed:
-        # Кулдаун ещё активен — показываем сколько осталось
         last = _get_last_bonus(uid)
         await call.message.answer(build_cooldown_text(last))
         await call.answer()
         return
 
-    # Слот занят атомарно — теперь ставим in-memory лок на время анимации
     _rolling.add(uid)
     await call.answer()
 
@@ -138,11 +139,9 @@ async def cb_bonus(call: CallbackQuery):
 
         await asyncio.sleep(3)
 
-        # Начисляем только после того как слот уже атомарно занят
         db_add_px(uid, reward)
 
         await call.message.answer(build_result_text(face, reward))
 
     finally:
-        # Всегда снимаем лок — даже если что-то упало
         _rolling.discard(uid)
