@@ -43,7 +43,6 @@ CELL_MINE    = "💣"
 CELL_EXPLODE = "💥"
 
 # ── Множители [честные] ────────────────────────────────────────────
-# Вычисляются по формуле справедливой выплаты для N мин на 25 клетках
 MINES_MULTIPLIERS = {
     2:  [1.08, 1.22, 1.36, 1.52, 1.71, 1.93, 2.19, 2.50, 2.87, 3.32, 3.87, 4.55, 5.39, 6.45, 7.80, 9.55, 11.85, 14.95, 19.25, 25.25, 33.75, 55.75, 83.25],
     3:  [1.15, 1.33, 1.55, 1.82, 2.15, 2.56, 3.07, 3.72, 4.55, 5.62, 7.02, 8.87, 11.35, 14.70, 25.30, 36.70, 49.80, 79.10, 99.80, 137.50, 195.00, 415.00],
@@ -188,12 +187,8 @@ def _active_game_error_text(session: dict) -> str:
     )
 
 
-# ── Генерация поля (ЧЕСТНАЯ — только выбранное кол-во мин) ────────
+# ── Генерация поля ────────────────────────────────────────────────
 def generate_board(mines_count: int) -> tuple[list, set]:
-    """
-    Расставляет ровно mines_count мин случайно по полю 5×5.
-    Никаких скрытых мин — только то, что выбрал игрок.
-    """
     positions = set(random.sample(range(GRID_SIZE * GRID_SIZE), mines_count))
     board = [i in positions for i in range(GRID_SIZE * GRID_SIZE)]
     return board, positions
@@ -203,7 +198,7 @@ def _create_session(mines_count: int, bet: float, chat_id: int, owner_id: int = 
     board, mine_positions = generate_board(mines_count)
     return {
         'board':            board,
-        'mine_positions':   mine_positions,   # только реальные мины
+        'mine_positions':   mine_positions,
         'revealed':         [False] * (GRID_SIZE * GRID_SIZE),
         'mines_count':      mines_count,
         'bet':              bet,
@@ -464,7 +459,6 @@ async def mines_cell_handler(callback: CallbackQuery, state: FSMContext):
         _start_timeout(user_id, callback.bot)
         session['revealed'][idx] = True
 
-        # ── ЧЕСТНЫЙ РЕЗУЛЬТАТ: проверяем pre-placed мины ───────────
         is_mine = session['board'][idx]
 
         if is_mine:
@@ -500,11 +494,10 @@ async def mines_cell_handler(callback: CallbackQuery, state: FSMContext):
             session['gems_opened'] += 1
             gems       = session['gems_opened']
             mines_count = session['mines_count']
-            total_safe  = GRID_SIZE * GRID_SIZE - mines_count  # ← честно: без скрытых мин
+            total_safe  = GRID_SIZE * GRID_SIZE - mines_count
             mult        = get_multiplier(mines_count, gems)
 
             if gems == total_safe:
-                # Победа — открыты все безопасные клетки
                 bet  = session['bet']
                 name = _nickname(callback.from_user)
 
@@ -635,7 +628,6 @@ async def process_mines_bet(message: Message, state: FSMContext):
     mines_count    = data.get('mines_count')
     waiting_manual = data.get('waiting_manual', False)
 
-    # Шаг 1: ждём ввод кол-ва мин вручную
     if waiting_manual and mines_count is None:
         try:
             m = int(message.text.strip())
@@ -693,6 +685,70 @@ async def process_mines_bet(message: Message, state: FSMContext):
 
     sent = await message.answer(game_text(session), parse_mode=ParseMode.HTML,
                                 reply_markup=build_game_keyboard(session))
+    session['message_id'] = sent.message_id
+    set_owner_fn(sent.message_id, user_id)
+    _game_board_owner[sent.message_id] = user_id
+    _start_timeout(user_id, message.bot)
+
+
+# ── Быстрая команда ────────────────────────────────────────────────
+# Форматы: мины 1000 5 | /мины 1000 5 | mines 1000 5 | /mines 1000 5
+# Молча игнорирует неверный формат, диапазон, сумму, нехватку средств
+# Показывает ошибку только при активной игре
+
+_QUICK_MINES_RE = re.compile(
+    r'^/?(?:мины|mines)\s+'
+    r'(\d+(?:[.,]\d+)?)\s+'
+    r'(\d+)'
+    r'\s*$',
+    re.IGNORECASE
+)
+
+
+@mines_router.message(F.text.regexp(r'^/?(?:мины|mines)\s+\S+', re.IGNORECASE))
+async def mines_quick_command(message: Message, state: FSMContext):
+    user_id = message.from_user.id
+    text    = (message.text or "").strip()
+
+    m = _QUICK_MINES_RE.match(text)
+    if not m:
+        return
+
+    try:
+        bet         = float(m.group(1).replace(',', '.'))
+        mines_count = int(m.group(2))
+    except ValueError:
+        return
+
+    if mines_count < 2 or mines_count > 24:
+        return
+    if bet < MIN_BET or bet > MAX_BET:
+        return
+
+    if _has_active_game(user_id):
+        await message.answer(_active_game_error_text(_sessions[user_id]), parse_mode=ParseMode.HTML)
+        return
+
+    bet_lock = _get_bet_lock(user_id)
+    if bet_lock.locked():
+        return
+
+    async with bet_lock:
+        if _has_active_game(user_id):
+            await message.answer(_active_game_error_text(_sessions[user_id]), parse_mode=ParseMode.HTML)
+            return
+
+        if not db_try_spend_px(user_id, bet):
+            return
+
+        session = _create_session(mines_count, bet, message.chat.id, user_id)
+        _sessions[user_id] = session
+        await state.set_state(MinesGame.playing)
+
+    sent = await message.answer(
+        game_text(session), parse_mode=ParseMode.HTML,
+        reply_markup=build_game_keyboard(session)
+    )
     session['message_id'] = sent.message_id
     set_owner_fn(sent.message_id, user_id)
     _game_board_owner[sent.message_id] = user_id
