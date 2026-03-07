@@ -6,18 +6,24 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 from aiogram.filters import CommandStart, CommandObject
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
+from aiogram.fsm.storage.memory import MemoryStorage
 
 from dotenv import load_dotenv
 
 import mine as _mine_module
 import referrals as _referral_module
 import bonus as _bonus_module
+import game as _game_module
+
 from mine import mine_router, mine_watchdog
 from referrals import referral_router
 from bonus import bonus_router
+from game import game_router, init_game
+
 from database import (
     init_db,
     db_get_or_create_user,
+    db_get_user,
     db_get_px,
     db_add_px,
     db_spend_px,
@@ -59,7 +65,6 @@ EMOJI_WELCOME     = "5199885118214255386"
 EMOJI_BIRJ        = "5402186569006210455"
 EMOJI_MINE        = "5197371802136892976"
 EMOJI_BONUS       = "5305699699204837855"
-# ── О проекте — замени на свои ID ──
 EMOJI_CHAT        = "5303138782004924588"
 EMOJI_NEWS        = "5201691993775818138"
 EMOJI_SUPPORT     = "5907025791006283345"
@@ -70,16 +75,19 @@ EMOJI_SUPPORT     = "5907025791006283345"
 _MSG_OWNERS_MAX = 10_000
 _msg_owners: dict[int, int] = {}
 
+
 def set_owner(message_id: int, user_id: int):
     if len(_msg_owners) >= _MSG_OWNERS_MAX:
-        keys_to_delete = list(_msg_owners.keys())[:_MSG_OWNERS_MAX // 5]
-        for k in keys_to_delete:
+        keys = list(_msg_owners.keys())[:_MSG_OWNERS_MAX // 5]
+        for k in keys:
             del _msg_owners[k]
     _msg_owners[message_id] = user_id
+
 
 def is_owner(message_id: int, user_id: int) -> bool:
     owner = _msg_owners.get(message_id)
     return owner is None or owner == user_id
+
 
 def inject_to_modules(bot: Bot):
     # mine
@@ -95,17 +103,22 @@ def inject_to_modules(bot: Bot):
     # bonus
     _bonus_module.is_owner_fn  = is_owner
     _bonus_module.set_owner_fn = set_owner
+    # game
+    _game_module.is_owner_fn  = is_owner
+    _game_module.set_owner_fn = set_owner
+    init_game(bot)
 
 
 # ─────────────────────────────────────────
-#  Bot + Dispatcher
+#  Bot + Dispatcher (с FSM-хранилищем)
 # ─────────────────────────────────────────
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
-dp  = Dispatcher()
+dp  = Dispatcher(storage=MemoryStorage())   # ← MemoryStorage нужен для FSM в game.py
 
 dp.include_router(mine_router)
 dp.include_router(referral_router)
 dp.include_router(bonus_router)
+dp.include_router(game_router)              # ← подключаем игровой роутер
 
 
 # ─────────────────────────────────────────
@@ -128,22 +141,25 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
         [
             InlineKeyboardButton(text="Промокоды", callback_data="promocodes", icon_custom_emoji_id=EMOJI_PROMO),
             InlineKeyboardButton(text="О проекте", callback_data="about",      icon_custom_emoji_id=EMOJI_ABOUT),
-            InlineKeyboardButton(text="Инструкция",url="https://t.me/REPLACE_INSTRUCTION_LINK",icon_custom_emoji_id=EMOJI_INSTRUCT),
+            InlineKeyboardButton(text="Инструкция",url="https://t.me/REPLACE_INSTRUCTION_LINK", icon_custom_emoji_id=EMOJI_INSTRUCT),
         ],
         [
             InlineKeyboardButton(text="Шахта",     callback_data="mine",       icon_custom_emoji_id=EMOJI_MINE),
         ],
     ])
 
+
 def back_main_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[[
         InlineKeyboardButton(text="Назад", callback_data="main_menu", icon_custom_emoji_id=EMOJI_BACK)
     ]])
 
+
 def back_profile_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[[
         InlineKeyboardButton(text="Назад", callback_data="profile", icon_custom_emoji_id=EMOJI_BACK)
     ]])
+
 
 def profile_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
@@ -152,16 +168,17 @@ def profile_keyboard() -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="Купить Px",  callback_data="buy_px", icon_custom_emoji_id=EMOJI_GOLD),
         ],
         [
-            InlineKeyboardButton(text="Назад", callback_data="main_menu", icon_custom_emoji_id=EMOJI_BACK)
+            InlineKeyboardButton(text="Назад", callback_data="main_menu", icon_custom_emoji_id=EMOJI_BACK),
         ],
     ])
+
 
 def about_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text="Чат",       url="https://t.me/REPLACE_CHAT_LINK",    icon_custom_emoji_id=EMOJI_CHAT),
-            InlineKeyboardButton(text="Новости",   url="https://t.me/REPLACE_NEWS_LINK",    icon_custom_emoji_id=EMOJI_NEWS),
-            InlineKeyboardButton(text="Поддержка", url="https://t.me/REPLACE_SUPPORT_LINK", icon_custom_emoji_id=EMOJI_SUPPORT),
+            InlineKeyboardButton(text="Чат",        url="https://t.me/REPLACE_CHAT_LINK",        icon_custom_emoji_id=EMOJI_CHAT),
+            InlineKeyboardButton(text="Новости",    url="https://t.me/REPLACE_NEWS_LINK",        icon_custom_emoji_id=EMOJI_NEWS),
+            InlineKeyboardButton(text="Поддержка",  url="https://t.me/REPLACE_SUPPORT_LINK",     icon_custom_emoji_id=EMOJI_SUPPORT),
         ],
         [
             InlineKeyboardButton(text="Инструкция", url="https://t.me/REPLACE_INSTRUCTION_LINK", icon_custom_emoji_id=EMOJI_INSTRUCT),
@@ -170,6 +187,7 @@ def about_keyboard() -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="Назад", callback_data="main_menu", icon_custom_emoji_id=EMOJI_BACK),
         ],
     ])
+
 
 # ─────────────────────────────────────────
 #  Тексты
@@ -186,6 +204,18 @@ MAIN_TEXT = (
     f'</blockquote>\n\n'
 )
 
+ABOUT_TEXT = (
+    f'<tg-emoji emoji-id="{EMOJI_ABOUT}">📋</tg-emoji> <b>О проекте</b>\n\n'
+    f'<blockquote>'
+    f'<tg-emoji emoji-id="5197288647275071607">🛡</tg-emoji><b>PixelX — честная игровая платформа в Telegram.</b>\n'
+    f'<b>Прозрачные правила, реальные шансы на победу, без скрытых условий.</b>'
+    f'</blockquote>\n\n'
+    f'<blockquote>'
+    f'<b><tg-emoji emoji-id="5397916757333654639">🛡</tg-emoji>Присоединяйся к сообществу, следи за новостями и обращайся в поддержку!</b>'
+    f'</blockquote>'
+)
+
+
 def dev_text(section: str) -> str:
     return (
         f'<tg-emoji emoji-id="{EMOJI_DEVELOPMENT}">🔧</tg-emoji> <b>{section}</b>\n\n'
@@ -195,15 +225,18 @@ def dev_text(section: str) -> str:
         f'</blockquote>'
     )
 
+
 def days_in_project(registered_at: datetime) -> int:
     return (datetime.now() - registered_at).days
+
 
 def days_label(n: int) -> str:
     if 11 <= n % 100 <= 19: return "дней"
     r = n % 10
-    if r == 1:         return "день"
-    if r in (2, 3, 4): return "дня"
+    if r == 1:          return "день"
+    if r in (2, 3, 4):  return "дня"
     return "дней"
+
 
 def build_profile_text(user: dict) -> str:
     days  = days_in_project(user["registered_at"])
@@ -227,6 +260,7 @@ def build_profile_text(user: dict) -> str:
         f'</blockquote>'
     )
 
+
 def build_stats_text(user: dict) -> str:
     days  = days_in_project(user["registered_at"])
     label = days_label(days)
@@ -244,29 +278,25 @@ def build_stats_text(user: dict) -> str:
         f'</blockquote>'
     )
 
+
 # ─────────────────────────────────────────
 #  Разделы в разработке
+#  (games убран — он теперь живой)
 # ─────────────────────────────────────────
 DEV_SECTIONS = {
-    "games":       "Игры",
-    "leaders":     "Лидеры",
-    "exchange":    "Биржа",
-    "promocodes":  "Промокоды",
-    }
+    "leaders":    "Лидеры",
+    "exchange":   "Биржа",
+    "promocodes": "Промокоды",
+}
+
 
 # ─────────────────────────────────────────
 #  Хэндлеры
 # ─────────────────────────────────────────
-
 @dp.message(CommandStart())
 async def cmd_start(message: Message, command: CommandObject):
     uid    = message.from_user.id
-    is_new = False
-
-    from database import db_get_user
-    existing = db_get_user(uid)
-    if existing is None:
-        is_new = True
+    is_new = db_get_user(uid) is None
 
     db_get_or_create_user(message.from_user)
 
@@ -276,25 +306,22 @@ async def cmd_start(message: Message, command: CommandObject):
             inviter_part = args[4:]
             if inviter_part.isdigit():
                 inviter_id = int(inviter_part)
-                if inviter_id != uid:
-                    if not db_is_already_referred(uid):
-                        registered = db_register_referral(
-                            invitee_id=uid,
-                            inviter_id=inviter_id,
-                        )
-                        if registered:
-                            rewarded_inviter = db_try_reward_referral(uid)
-                            if rewarded_inviter:
-                                try:
-                                    await bot.send_message(
-                                        chat_id=inviter_id,
-                                        text=(
-                                            f'<tg-emoji emoji-id="5222079954421818267">👥</tg-emoji> '
-                                            f'<b>Новый реферал!</b>\n\n'
-                                        )
+                if inviter_id != uid and not db_is_already_referred(uid):
+                    registered = db_register_referral(invitee_id=uid, inviter_id=inviter_id)
+                    if registered:
+                        rewarded_inviter = db_try_reward_referral(uid)
+                        if rewarded_inviter:
+                            try:
+                                await bot.send_message(
+                                    chat_id=inviter_id,
+                                    text=(
+                                        f'<tg-emoji emoji-id="5222079954421818267">👥</tg-emoji> '
+                                        f'<b>Новый реферал!</b>\n\n'
+                                        f'Вам начислено <b>{REFERRAL_REWARD_PX} Px</b>!'
                                     )
-                                except Exception:
-                                    pass
+                                )
+                            except Exception:
+                                pass
 
     sent = await message.answer(MAIN_TEXT, reply_markup=main_menu_keyboard())
     set_owner(sent.message_id, uid)
@@ -308,6 +335,7 @@ async def cb_main_menu(call: CallbackQuery):
     set_owner(call.message.message_id, call.from_user.id)
     await call.answer()
 
+
 @dp.callback_query(F.data == "profile")
 async def cb_profile(call: CallbackQuery):
     if not is_owner(call.message.message_id, call.from_user.id):
@@ -316,6 +344,7 @@ async def cb_profile(call: CallbackQuery):
     await call.message.edit_text(build_profile_text(user), reply_markup=profile_keyboard())
     set_owner(call.message.message_id, call.from_user.id)
     await call.answer()
+
 
 @dp.callback_query(F.data == "stats")
 async def cb_stats(call: CallbackQuery):
@@ -326,6 +355,7 @@ async def cb_stats(call: CallbackQuery):
     set_owner(call.message.message_id, call.from_user.id)
     await call.answer()
 
+
 @dp.callback_query(F.data == "buy_px")
 async def cb_buy_px(call: CallbackQuery):
     if not is_owner(call.message.message_id, call.from_user.id):
@@ -334,16 +364,6 @@ async def cb_buy_px(call: CallbackQuery):
     set_owner(call.message.message_id, call.from_user.id)
     await call.answer()
 
-ABOUT_TEXT = (
-    f'<tg-emoji emoji-id="{EMOJI_ABOUT}">📋</tg-emoji> <b>О проекте</b>\n\n'
-    f'<blockquote>'
-    f'<tg-emoji emoji-id="5197288647275071607">🛡</tg-emoji><b>PixelX — честная игровая платформа в Telegram.</b>\n'
-    f'<b>Прозрачные правила, реальные шансы на победу, без скрытых условий.</b>'
-    f'</blockquote>\n\n'
-    f'<blockquote>'
-    f'<b><tg-emoji emoji-id="5397916757333654639">🛡</tg-emoji>Присоединяйся к сообществу, следи за новостями и обращайся в поддержку — мы всегда на связи!</b>'
-    f'</blockquote>'
-)
 
 @dp.callback_query(F.data == "about")
 async def cb_about(call: CallbackQuery):
@@ -353,6 +373,7 @@ async def cb_about(call: CallbackQuery):
     set_owner(call.message.message_id, call.from_user.id)
     await call.answer()
 
+
 @dp.callback_query(F.data.in_(DEV_SECTIONS.keys()))
 async def cb_dev_section(call: CallbackQuery):
     if not is_owner(call.message.message_id, call.from_user.id):
@@ -360,6 +381,7 @@ async def cb_dev_section(call: CallbackQuery):
     await call.message.edit_text(dev_text(DEV_SECTIONS[call.data]), reply_markup=back_main_keyboard())
     set_owner(call.message.message_id, call.from_user.id)
     await call.answer()
+
 
 # ─────────────────────────────────────────
 #  Запуск
@@ -370,6 +392,7 @@ async def main():
     asyncio.create_task(mine_watchdog())
     print("✅ Бот запущен!")
     await dp.start_polling(bot)
+
 
 if __name__ == "__main__":
     asyncio.run(main())
