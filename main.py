@@ -128,7 +128,7 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
         [
             InlineKeyboardButton(text="Промокоды", callback_data="promocodes", icon_custom_emoji_id=EMOJI_PROMO),
             InlineKeyboardButton(text="О проекте", callback_data="about",      icon_custom_emoji_id=EMOJI_ABOUT),
-            InlineKeyboardButton(text="Инструкция",callback_data="instruction",icon_custom_emoji_id=EMOJI_INSTRUCT),
+            InlineKeyboardButton(text="Инструкция",url="https://t.me/REPLACE_INSTRUCTION_LINK",icon_custom_emoji_id=EMOJI_INSTRUCT),
         ],
         [
             InlineKeyboardButton(text="Шахта",     callback_data="mine",       icon_custom_emoji_id=EMOJI_MINE),
@@ -164,7 +164,7 @@ def about_keyboard() -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="Поддержка", url="https://t.me/REPLACE_SUPPORT_LINK", icon_custom_emoji_id=EMOJI_SUPPORT),
         ],
         [
-            InlineKeyboardButton(text="Инструкция", callback_data="instruction", icon_custom_emoji_id=EMOJI_INSTRUCT),
+            InlineKeyboardButton(text="Инструкция", url="https://t.me/REPLACE_INSTRUCTION_LINK", icon_custom_emoji_id=EMOJI_INSTRUCT),
         ],
         [
             InlineKeyboardButton(text="Назад", callback_data="main_menu", icon_custom_emoji_id=EMOJI_BACK),
@@ -252,8 +252,7 @@ DEV_SECTIONS = {
     "leaders":     "Лидеры",
     "exchange":    "Биржа",
     "promocodes":  "Промокоды",
-    "instruction": "Инструкция",
-}
+    }
 
 # ─────────────────────────────────────────
 #  Хэндлеры
