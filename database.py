@@ -120,11 +120,15 @@ def db_get_px(uid: int) -> float:
 
 
 def db_add_px(uid: int, amount: float):
+    if amount <= 0:
+        return
     with get_conn() as conn:
         conn.execute("UPDATE users SET px = ROUND(px + ?, 2) WHERE id = ?", (amount, uid))
 
 
 def db_spend_px(uid: int, amount: float):
+    if amount <= 0:
+        return
     with get_conn() as conn:
         conn.execute("""
             UPDATE users SET px = MAX(0, ROUND(px - ?, 2)) WHERE id = ?
