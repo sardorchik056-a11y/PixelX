@@ -24,7 +24,13 @@ DICE_REWARDS = {
 
 COOLDOWN_HOURS = 24
 
+# Множество uid кто прямо сейчас в процессе броска — защита от двойного нажатия
+_rolling: set[int] = set()
 
+
+# ─────────────────────────────────────────
+#  БД
+# ─────────────────────────────────────────
 def _get_last_bonus(uid: int) -> datetime | None:
     from database import get_conn
     with get_conn() as conn:
@@ -36,15 +42,27 @@ def _get_last_bonus(uid: int) -> datetime | None:
         return None
 
 
-def _set_last_bonus(uid: int):
+def _try_claim_bonus(uid: int) -> bool:
+    """
+    Атомарно проверяет кулдаун и выставляет время одной транзакцией.
+    Возвращает True если бонус успешно занят, False если кулдаун ещё активен.
+    """
     from database import get_conn
-    now = datetime.now().isoformat()
+    now = datetime.now()
+    cooldown_boundary = (now - timedelta(hours=COOLDOWN_HOURS)).isoformat()
+    now_iso = now.isoformat()
+
     with get_conn() as conn:
-        conn.execute("""
+        # Пытаемся вставить новую запись — только если её нет или last_bonus_at устарел
+        cur = conn.execute("""
             INSERT INTO bonus (uid, last_bonus_at)
             VALUES (?, ?)
             ON CONFLICT(uid) DO UPDATE SET last_bonus_at = excluded.last_bonus_at
-        """, (uid, now))
+            WHERE last_bonus_at IS NULL OR last_bonus_at <= ?
+        """, (uid, now_iso, cooldown_boundary))
+
+        # rowcount > 0 — запись обновилась, значит кулдаун прошёл и мы успешно заняли слот
+        return cur.rowcount > 0
 
 
 def _time_until_next(last: datetime) -> str:
@@ -59,6 +77,9 @@ def _time_until_next(last: datetime) -> str:
     return f"{minutes}мин"
 
 
+# ─────────────────────────────────────────
+#  Тексты
+# ─────────────────────────────────────────
 def build_result_text(face: int, reward: int) -> str:
     face_emojis = {1: "1️⃣", 2: "2️⃣", 3: "3️⃣", 4: "4️⃣", 5: "5️⃣", 6: "6️⃣"}
     return (
@@ -79,30 +100,50 @@ def build_cooldown_text(last: datetime) -> str:
     )
 
 
+# ─────────────────────────────────────────
+#  Хэндлер
+# ─────────────────────────────────────────
 @bonus_router.callback_query(F.data == "bonus")
 async def cb_bonus(call: CallbackQuery):
     if is_owner_fn and not is_owner_fn(call.message.message_id, call.from_user.id):
         await call.answer("🚫 Это не ваша кнопка!", show_alert=True)
         return
 
-    uid  = call.from_user.id
-    last = _get_last_bonus(uid)
+    uid = call.from_user.id
 
-    if last is not None and datetime.now() - last < timedelta(hours=COOLDOWN_HOURS):
+    # Защита 1: in-memory лок — если юзер уже в процессе броска, игнорируем
+    if uid in _rolling:
+        await call.answer("🎲 Подождите, кубик уже брошен!", show_alert=True)
+        return
+
+    # Защита 2: атомарная проверка + запись кулдауна в БД одной транзакцией
+    claimed = _try_claim_bonus(uid)
+
+    if not claimed:
+        # Кулдаун ещё активен — показываем сколько осталось
+        last = _get_last_bonus(uid)
         await call.message.answer(build_cooldown_text(last))
         await call.answer()
         return
 
+    # Слот занят атомарно — теперь ставим in-memory лок на время анимации
+    _rolling.add(uid)
     await call.answer()
-    db_get_or_create_user(call.from_user)
 
-    dice_msg = await call.message.answer_dice(emoji="🎲")
-    face     = dice_msg.dice.value
-    reward   = DICE_REWARDS[face]
+    try:
+        db_get_or_create_user(call.from_user)
 
-    await asyncio.sleep(3)
+        dice_msg = await call.message.answer_dice(emoji="🎲")
+        face     = dice_msg.dice.value
+        reward   = DICE_REWARDS[face]
 
-    db_add_px(uid, reward)
-    _set_last_bonus(uid)
+        await asyncio.sleep(3)
 
-    await call.message.answer(build_result_text(face, reward))
+        # Начисляем только после того как слот уже атомарно занят
+        db_add_px(uid, reward)
+
+        await call.message.answer(build_result_text(face, reward))
+
+    finally:
+        # Всегда снимаем лок — даже если что-то упало
+        _rolling.discard(uid)
