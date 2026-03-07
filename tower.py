@@ -4,12 +4,6 @@ tower.py — Башня (честная версия)
 Честность: бомбы расставляются ЗАРАНЕЕ при создании сессии
 (random.sample). Результат нажатия определяется фактическим
 расположением, а не броском процента в момент клика.
-
-Шансы попасть на бомбу:
-  Сложность 1 (1 бомба из 5): 20%
-  Сложность 2 (2 бомбы из 5): 40%
-  Сложность 3 (3 бомбы из 5): 60%
-  Сложность 4 (4 бомбы из 5): 80%
 ─────────────────────────────────────────────────────────────────
 """
 
@@ -51,7 +45,6 @@ CELL_SAFE_REVEAL = "▪️"
 CELL_BOMB        = "💣"
 CELL_EXPLODE     = "💥"
 
-# Количество бомб на этаже (pre-placed)
 DIFFICULTY_BOMBS = {1: 1, 2: 2, 3: 3, 4: 4}
 DIFFICULTY_NAMES = {1: "Лёгкий", 2: "Средний", 3: "Сложный", 4: "Безумный"}
 DIFFICULTY_EMOJI = {1: "🟢", 2: "🟡", 3: "🔴", 4: "💀"}
@@ -181,9 +174,8 @@ def _active_game_error_text(session: dict) -> str:
     )
 
 
-# ── Создание сессии с PRE-PLACED бомбами ──────────────────────────
+# ── Создание сессии ────────────────────────────────────────────────
 def _create_session(difficulty: int, bet: float, chat_id: int, owner_id: int = 0) -> dict:
-    """Бомбы расставляются ЗАРАНЕЕ — честный рандом."""
     num_bombs = DIFFICULTY_BOMBS[difficulty]
     floors = []
     for _ in range(FLOORS):
@@ -453,7 +445,6 @@ async def tower_cell_handler(callback: CallbackQuery, state: FSMContext):
         floor_data['chosen'] = col
         difficulty = session['difficulty']
 
-        # ── ЧЕСТНЫЙ РЕЗУЛЬТАТ: бомбы были расставлены заранее ──────
         is_bomb = col in floor_data['bomb_cols']
         floor_data['is_bomb'] = is_bomb
 
@@ -662,6 +653,68 @@ async def process_tower_bet(message: Message, state: FSMContext):
 
     sent = await message.answer(game_text(session), parse_mode=ParseMode.HTML,
                                 reply_markup=build_tower_keyboard(session))
+    session['message_id'] = sent.message_id
+    set_owner_fn(sent.message_id, user_id)
+    _game_board_owner[sent.message_id] = user_id
+    _start_timeout(user_id, message.bot)
+
+
+# ── Быстрая команда ────────────────────────────────────────────────
+# Форматы: башня 500 2 | /башня 500 2 | tower 500 2 | /tower 500 2
+# Молча игнорирует неверный формат, сложность не 1-4, сумму, нехватку средств
+# Показывает ошибку только при активной игре
+
+_QUICK_TOWER_RE = re.compile(
+    r'^/?(?:башня|tower)\s+'
+    r'(\d+(?:[.,]\d+)?)\s+'
+    r'([1-4])'
+    r'\s*$',
+    re.IGNORECASE
+)
+
+
+@tower_router.message(F.text.regexp(r'^/?(?:башня|tower)\s+\S+', re.IGNORECASE))
+async def tower_quick_command(message: Message, state: FSMContext):
+    user_id = message.from_user.id
+    text    = (message.text or "").strip()
+
+    m = _QUICK_TOWER_RE.match(text)
+    if not m:
+        return
+
+    try:
+        bet        = float(m.group(1).replace(',', '.'))
+        difficulty = int(m.group(2))
+    except ValueError:
+        return
+
+    if bet < MIN_BET or bet > MAX_BET:
+        return
+
+    if _has_active_game(user_id):
+        await message.answer(_active_game_error_text(_sessions[user_id]), parse_mode=ParseMode.HTML)
+        return
+
+    bet_lock = _get_bet_lock(user_id)
+    if bet_lock.locked():
+        return
+
+    async with bet_lock:
+        if _has_active_game(user_id):
+            await message.answer(_active_game_error_text(_sessions[user_id]), parse_mode=ParseMode.HTML)
+            return
+
+        if not db_try_spend_px(user_id, bet):
+            return
+
+        session = _create_session(difficulty, bet, message.chat.id, user_id)
+        _sessions[user_id] = session
+        await state.set_state(TowerGame.playing)
+
+    sent = await message.answer(
+        game_text(session), parse_mode=ParseMode.HTML,
+        reply_markup=build_tower_keyboard(session)
+    )
     session['message_id'] = sent.message_id
     set_owner_fn(sent.message_id, user_id)
     _game_board_owner[sent.message_id] = user_id
