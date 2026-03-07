@@ -1,7 +1,7 @@
 import asyncio
 from datetime import datetime, timedelta
 from aiogram import Router, F
-from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import CallbackQuery
 
 from database import db_add_px, db_get_or_create_user
 
@@ -12,7 +12,6 @@ set_owner_fn = None
 
 EMOJI_BONUS = "5305699699204837855"
 EMOJI_GOLD  = "5278467510604160626"
-EMOJI_BACK  = "5906771962734057347"
 
 DICE_REWARDS = {
     1: 200,
@@ -60,12 +59,6 @@ def _time_until_next(last: datetime) -> str:
     return f"{minutes}мин"
 
 
-def back_main_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text="◀️ Назад", callback_data="main_menu")
-    ]])
-
-
 def build_result_text(face: int, reward: int) -> str:
     face_emojis = {1: "1️⃣", 2: "2️⃣", 3: "3️⃣", 4: "4️⃣", 5: "5️⃣", 6: "6️⃣"}
     return (
@@ -96,9 +89,7 @@ async def cb_bonus(call: CallbackQuery):
     last = _get_last_bonus(uid)
 
     if last is not None and datetime.now() - last < timedelta(hours=COOLDOWN_HOURS):
-        await call.message.edit_text(build_cooldown_text(last), reply_markup=back_main_keyboard())
-        if set_owner_fn:
-            set_owner_fn(call.message.message_id, uid)
+        await call.message.answer(build_cooldown_text(last))
         await call.answer()
         return
 
@@ -114,9 +105,4 @@ async def cb_bonus(call: CallbackQuery):
     db_add_px(uid, reward)
     _set_last_bonus(uid)
 
-    result_msg = await call.message.answer(
-        build_result_text(face, reward),
-        reply_markup=back_main_keyboard(),
-    )
-    if set_owner_fn:
-        set_owner_fn(result_msg.message_id, uid)
+    await call.message.answer(build_result_text(face, reward))
