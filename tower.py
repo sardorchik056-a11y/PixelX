@@ -673,7 +673,7 @@ _QUICK_TOWER_RE = re.compile(
 )
 
 
-@tower_router.message(F.text.regexp(r'^/?(?:башня|tower)\s+\S+', re.IGNORECASE))
+@tower_router.message(F.text.regexp(r'(?i)^/?(?:башня|tower)\s+\S+'))
 async def tower_quick_command(message: Message, state: FSMContext):
     user_id = message.from_user.id
     text    = (message.text or "").strip()
