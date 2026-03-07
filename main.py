@@ -14,11 +14,17 @@ import mine as _mine_module
 import referrals as _referral_module
 import bonus as _bonus_module
 import game as _game_module
+import tower as _tower_module
+import mines as _mines_module
+import gold as _gold_module
 
 from mine import mine_router, mine_watchdog
 from referrals import referral_router
 from bonus import bonus_router
 from game import game_router, init_game
+from tower import tower_router
+from mines import mines_router
+from gold import gold_router
 
 from database import (
     init_db,
@@ -107,6 +113,15 @@ def inject_to_modules(bot: Bot):
     _game_module.is_owner_fn  = is_owner
     _game_module.set_owner_fn = set_owner
     init_game(bot)
+    # tower
+    _tower_module.is_owner_fn  = is_owner
+    _tower_module.set_owner_fn = set_owner
+    # mines
+    _mines_module.is_owner_fn  = is_owner
+    _mines_module.set_owner_fn = set_owner
+    # gold
+    _gold_module.is_owner_fn  = is_owner
+    _gold_module.set_owner_fn = set_owner
 
 
 # ─────────────────────────────────────────
@@ -118,7 +133,10 @@ dp  = Dispatcher(storage=MemoryStorage())   # ← MemoryStorage нужен дл�
 dp.include_router(mine_router)
 dp.include_router(referral_router)
 dp.include_router(bonus_router)
-dp.include_router(game_router)              # ← подключаем игровой роутер
+dp.include_router(game_router)
+dp.include_router(tower_router)
+dp.include_router(mines_router)
+dp.include_router(gold_router)
 
 
 # ─────────────────────────────────────────
