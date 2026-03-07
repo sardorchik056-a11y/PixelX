@@ -165,7 +165,6 @@ MAIN_TEXT = (
     f'<tg-emoji emoji-id="5262517101578443800">🏆</tg-emoji> <b>Испытай свои навыки в мини-играх, набирай очки, поднимайся в таблице лидеров</b> '
     f'и стань одним из лучших игроков PixelX.'
     f'</blockquote>\n\n'
-    f'🚀 Выберите раздел в меню ниже'
 )
 
 def dev_text(section: str) -> str:
@@ -275,9 +274,6 @@ async def cmd_start(message: Message, command: CommandObject):
                                         text=(
                                             f'<tg-emoji emoji-id="5222079954421818267">👥</tg-emoji> '
                                             f'<b>Новый реферал!</b>\n\n'
-                                            f'<blockquote>'
-                                            f'Начислено: <code>+{REFERRAL_REWARD_PX:,} Px</code>'
-                                            f'</blockquote>'
                                         )
                                     )
                                 except Exception:
