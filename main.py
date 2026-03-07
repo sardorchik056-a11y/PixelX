@@ -11,8 +11,10 @@ from dotenv import load_dotenv
 
 import mine as _mine_module
 import referrals as _referral_module
+import bonus as _bonus_module
 from mine import mine_router, mine_watchdog
 from referrals import referral_router
+from bonus import bonus_router
 from database import (
     init_db,
     db_get_or_create_user,
@@ -86,6 +88,9 @@ def inject_to_modules(bot: Bot):
     # referrals
     _referral_module.is_owner_fn  = is_owner
     _referral_module.set_owner_fn = set_owner
+    # bonus
+    _bonus_module.is_owner_fn  = is_owner
+    _bonus_module.set_owner_fn = set_owner
 
 
 # ─────────────────────────────────────────
@@ -96,6 +101,7 @@ dp  = Dispatcher()
 
 dp.include_router(mine_router)
 dp.include_router(referral_router)
+dp.include_router(bonus_router)
 
 
 # ─────────────────────────────────────────
@@ -221,7 +227,6 @@ DEV_SECTIONS = {
     "games":       "Игры",
     "leaders":     "Лидеры",
     "exchange":    "Биржа",
-    "bonus":       "Бонус",
     "promocodes":  "Промокоды",
     "about":       "О проекте",
     "instruction": "Инструкция",
@@ -233,48 +238,31 @@ DEV_SECTIONS = {
 
 @dp.message(CommandStart())
 async def cmd_start(message: Message, command: CommandObject):
-    uid      = message.from_user.id
-    is_new   = False
+    uid    = message.from_user.id
+    is_new = False
 
-    # Проверяем — новый ли пользователь (до создания)
     from database import db_get_user
     existing = db_get_user(uid)
     if existing is None:
         is_new = True
 
-    # Создаём / обновляем пользователя
     db_get_or_create_user(message.from_user)
 
-    # ── Обработка реферальной ссылки ──────────────────────────────────────
     if is_new and command.args:
         args = command.args.strip()
-
-        # Формат: ref_<inviter_id>
         if args.startswith("ref_"):
             inviter_part = args[4:]
-
-            # Защита: inviter_id должен быть числом
             if inviter_part.isdigit():
                 inviter_id = int(inviter_part)
-
-                # Защита: нельзя пригласить самого себя
                 if inviter_id != uid:
-
-                    # Защита: не был ли уже приглашён
                     if not db_is_already_referred(uid):
-
-                        # Регистрируем реферала
                         registered = db_register_referral(
                             invitee_id=uid,
                             inviter_id=inviter_id,
                         )
-
                         if registered:
-                            # Атомарно начисляем награду пригласившему
                             rewarded_inviter = db_try_reward_referral(uid)
-
                             if rewarded_inviter:
-                                # Уведомляем приглашённого
                                 await message.answer(
                                     f'<tg-emoji emoji-id="5222079954421818267">👥</tg-emoji> '
                                     f'<b>Вы зашли по реферальной ссылке!</b>\n\n'
@@ -282,7 +270,6 @@ async def cmd_start(message: Message, command: CommandObject):
                                     f'Пригласивший вас получил <code>{REFERRAL_REWARD_PX:,} Px</code> <tg-emoji emoji-id="5461151367559141950">👥</tg-emoji>'
                                     f'</blockquote>'
                                 )
-                                # Уведомляем пригласившего
                                 try:
                                     await bot.send_message(
                                         chat_id=inviter_id,
@@ -292,9 +279,8 @@ async def cmd_start(message: Message, command: CommandObject):
                                         )
                                     )
                                 except Exception:
-                                    pass  # пользователь мог заблокировать бота
+                                    pass
 
-    # Отправляем главное меню
     sent = await message.answer(MAIN_TEXT, reply_markup=main_menu_keyboard())
     set_owner(sent.message_id, uid)
 
