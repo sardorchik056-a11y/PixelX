@@ -85,17 +85,16 @@ def build_result_text(face: int, reward: int) -> str:
     return (
         f'<tg-emoji emoji-id="{EMOJI_BONUS}">🎁</tg-emoji> <b>Ежедневный бонус</b>\n\n'
         f'<blockquote>'
-        f'🎲 Выпало: {face_emojis[face]}\n'
-        f'<tg-emoji emoji-id="{EMOJI_GOLD}">💰</tg-emoji> Начислено: <code>+{reward:,} Px</code>'
+        f'<tg-emoji emoji-id="5310278924616356636">💰</tg-emoji> Выпало: {face_emojis[face]}\n'
+        f'<tg-emoji emoji-id="5429651785352501917">💰</tg-emoji> Начислено: <code>+{reward:,} Px</code>'
         f'</blockquote>'
     )
 
 
 def build_cooldown_text(last: datetime) -> str:
     return (
-        f'<tg-emoji emoji-id="{EMOJI_BONUS}">🎁</tg-emoji> <b>Ежедневный бонус</b>\n\n'
         f'<blockquote>'
-        f'⏳ Повтор через: <code>{_time_until_next(last)}</code>'
+        f'<tg-emoji emoji-id="5382194935057372936">💰</tg-emoji>Бонус доступен через: <code>{_time_until_next(last)}</code>'
         f'</blockquote>'
     )
 
