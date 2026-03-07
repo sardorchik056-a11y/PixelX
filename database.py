@@ -127,12 +127,59 @@ def db_add_px(uid: int, amount: float):
 
 
 def db_spend_px(uid: int, amount: float):
+    """Безусловное списание (не проверяет баланс)."""
     if amount <= 0:
         return
     with get_conn() as conn:
         conn.execute("""
             UPDATE users SET px = MAX(0, ROUND(px - ?, 2)) WHERE id = ?
         """, (amount, uid))
+
+
+def db_try_spend_px(uid: int, amount: float) -> bool:
+    """
+    Атомарное списание с проверкой баланса.
+    Возвращает True если средства списаны, False если недостаточно.
+    Используется в играх — гарантирует, что ставка снята ровно один раз.
+    """
+    if amount <= 0:
+        return False
+    with get_conn() as conn:
+        # Атомарное обновление: списываем только если хватает
+        cur = conn.execute("""
+            UPDATE users
+            SET px = ROUND(px - ?, 2)
+            WHERE id = ? AND px >= ?
+        """, (amount, uid, amount))
+        return cur.rowcount > 0
+
+
+def db_record_game_result(uid: int, bet: float, won: float):
+    """
+    Фиксирует результат игры в статистике пользователя.
+    won > 0  → запись в total_won
+    won == 0 → запись в total_lost (ставка)
+    """
+    with get_conn() as conn:
+        if won > 0:
+            conn.execute("""
+                UPDATE users
+                SET games_played = games_played + 1,
+                    total_won    = ROUND(total_won + ?, 2)
+                WHERE id = ?
+            """, (won, uid))
+        else:
+            conn.execute("""
+                UPDATE users
+                SET games_played = games_played + 1,
+                    total_lost   = ROUND(total_lost + ?, 2)
+                WHERE id = ?
+            """, (bet, uid))
+
+
+# Асинхронная обёртка для совместимости с asyncio.create_task
+async def save_game_result(uid: int, _game_name: str, won: float, bet: float = 0.0):
+    db_record_game_result(uid, bet, won)
 
 
 def _row_to_user(row: dict) -> dict:
