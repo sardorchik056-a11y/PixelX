@@ -1,3 +1,4 @@
+import asyncio
 import random
 from datetime import datetime, timedelta
 from aiogram import Router, F
@@ -67,14 +68,8 @@ def _next_bonus_time(last: datetime) -> str:
 
 
 # ─────────────────────────────────────────
-#  Клавиатуры
+#  Клавиатура
 # ─────────────────────────────────────────
-def bonus_menu_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🎲 Бросить кубик", callback_data="bonus_roll")],
-        [InlineKeyboardButton(text="Назад", callback_data="main_menu", icon_custom_emoji_id=EMOJI_BACK)],
-    ])
-
 def back_main_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[[
         InlineKeyboardButton(text="Назад", callback_data="main_menu", icon_custom_emoji_id=EMOJI_BACK)
@@ -84,25 +79,10 @@ def back_main_keyboard() -> InlineKeyboardMarkup:
 # ─────────────────────────────────────────
 #  Тексты
 # ─────────────────────────────────────────
-def build_bonus_info_text() -> str:
-    rewards_lines = "\n".join(
-        f"  <b>{face}</b> ⟶ <code>{px:,} Px</code>"
-        for face, px in DICE_REWARDS.items()
-    )
-    return (
-        f'<tg-emoji emoji-id="{EMOJI_BONUS}">🎁</tg-emoji> <b>Ежедневный бонус</b>\n\n'
-        f'<blockquote>'
-        f'🎲 Бросьте кубик раз в 24 часа и получите награду!\n\n'
-        f'<b>Возможные выигрыши:</b>\n'
-        f'{rewards_lines}'
-        f'</blockquote>'
-    )
-
-
 def build_result_text(face: int, reward: int) -> str:
     face_emojis = {1: "1️⃣", 2: "2️⃣", 3: "3️⃣", 4: "4️⃣", 5: "5️⃣", 6: "6️⃣"}
     return (
-        f'<tg-emoji emoji-id="{EMOJI_BONUS}">🎁</tg-emoji> <b>Бонус получен!</b>\n\n'
+        f'<tg-emoji emoji-id="{EMOJI_BONUS}">🎁</tg-emoji> <b>Ежедневный бонус</b>\n\n'
         f'<blockquote>'
         f'🎲 Выпало: {face_emojis[face]} — <b>{face}</b>\n'
         f'<tg-emoji emoji-id="{EMOJI_GOLD}">⚡</tg-emoji> '
@@ -123,7 +103,7 @@ def build_cooldown_text(last: datetime) -> str:
 
 
 # ─────────────────────────────────────────
-#  Хэндлеры
+#  Хэндлер
 # ─────────────────────────────────────────
 @bonus_router.callback_query(F.data == "bonus")
 async def cb_bonus(call: CallbackQuery):
@@ -133,42 +113,35 @@ async def cb_bonus(call: CallbackQuery):
 
     uid  = call.from_user.id
     last = _get_last_bonus(uid)
-    on_cooldown = last is not None and datetime.now() - last < timedelta(hours=COOLDOWN_HOURS)
 
-    if on_cooldown:
-        await call.message.edit_text(build_cooldown_text(last), reply_markup=back_main_keyboard())
-    else:
-        await call.message.edit_text(build_bonus_info_text(), reply_markup=bonus_menu_keyboard())
-
-    if set_owner_fn:
-        set_owner_fn(call.message.message_id, uid)
-    await call.answer()
-
-
-@bonus_router.callback_query(F.data == "bonus_roll")
-async def cb_bonus_roll(call: CallbackQuery):
-    if is_owner_fn and not is_owner_fn(call.message.message_id, call.from_user.id):
-        await call.answer("🚫 Это не ваша кнопка!", show_alert=True)
-        return
-
-    uid  = call.from_user.id
-    last = _get_last_bonus(uid)
-
-    # Двойная проверка от двойного нажатия
+    # Кулдаун — показываем когда следующий бросок
     if last is not None and datetime.now() - last < timedelta(hours=COOLDOWN_HOURS):
-        await call.answer("⏳ Бонус уже получен, подождите 24 часа!", show_alert=True)
+        await call.message.edit_text(build_cooldown_text(last), reply_markup=back_main_keyboard())
+        if set_owner_fn:
+            set_owner_fn(call.message.message_id, uid)
+        await call.answer()
         return
+
+    await call.answer()
 
     db_get_or_create_user(call.from_user)
 
-    face   = random.randint(1, 6)
-    reward = DICE_REWARDS[face]
+    # Сразу кидаем кубик — Telegram сам анимирует выпавшую грань
+    dice_msg = await call.message.answer_dice(emoji="🎲")
+    face     = dice_msg.dice.value
+    reward   = DICE_REWARDS[face]
 
+    # Ждём пока анимация кубика завершится (~3 сек)
+    await asyncio.sleep(3)
+
+    # Начисляем и сохраняем
     db_add_px(uid, reward)
     _set_last_bonus(uid)
 
-    await call.message.edit_text(build_result_text(face, reward), reply_markup=back_main_keyboard())
-
+    # Отправляем результат отдельным сообщением
+    result_msg = await call.message.answer(
+        build_result_text(face, reward),
+        reply_markup=back_main_keyboard(),
+    )
     if set_owner_fn:
-        set_owner_fn(call.message.message_id, uid)
-    await call.answer(f"🎲 Выпало {face} — +{reward:,} Px!")
+        set_owner_fn(result_msg.message_id, uid)
