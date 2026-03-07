@@ -640,7 +640,7 @@ _QUICK_GOLD_RE = re.compile(
 )
 
 
-@gold_router.message(F.text.regexp(r'^/?(?:золото|gold)\s+\S+', re.IGNORECASE))
+@gold_router.message(F.text.regexp(r'(?i)^/?(?:золото|gold)\s+\S+'))
 async def gold_quick_command(message: Message, state: FSMContext):
     user_id = message.from_user.id
     text    = (message.text or "").strip()
