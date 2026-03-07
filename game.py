@@ -233,14 +233,14 @@ def is_bet_command(text: str) -> bool:
 #  Игровые функции
 # ─────────────────────────────────────────
 WIN_TEXT  = (
-    "<b>{name} — Вы выиграли! <tg-emoji emoji-id="5461151367559141950">👋</tg-emoji></b>\n\n"
+    '<b>{name} — Вы выиграли! <tg-emoji emoji-id="5461151367559141950">👋</tg-emoji></b>\n\n'
     "<blockquote><code>{winnings:.2f}</code>Px зачислены на баланс!</blockquote>\n"
-    "<blockquote><tg-emoji emoji-id="5461151367559141950">👋</tg-emoji> Поздравляем!</blockquote>"
+    '<blockquote><tg-emoji emoji-id="5461151367559141950">👋</tg-emoji> Поздравляем!</blockquote>'
 )
 LOSE_TEXT = (
-    "<b>{name} — Вы проиграли <tg-emoji emoji-id="5460755126761312667">👋</tg-emoji></b>\n\n"
+    '<b>{name} — Вы проиграли <tg-emoji emoji-id="5460755126761312667">👋</tg-emoji></b>\n\n'
     "<blockquote><b><i>Это не повод сдаваться! Пробуй снова!</i></b></blockquote>\n"
-    "<blockquote><tg-emoji emoji-id="5305699699204837855">👋</tg-emoji> Желаем удачи!</blockquote>"
+    '<blockquote><tg-emoji emoji-id="5305699699204837855">👋</tg-emoji> Желаем удачи!</blockquote>'
 )
 
 
@@ -506,7 +506,7 @@ async def cb_dice_exact(call: CallbackQuery):
         ],
         [InlineKeyboardButton(text="Назад", callback_data="game_menu_dice", icon_custom_emoji_id=EMOJI_BACK)],
     ])
-    await call.message.edit_text("<blockquote><b> <tg-emoji emoji-id="{EMOJI_NUMBER}">👋</tg-emoji>Точное число — выберите:</b></blockquote>",
+    await call.message.edit_text('<blockquote><b> <tg-emoji emoji-id="{EMOJI_NUMBER}">👋</tg-emoji>Точное число — выберите:</b></blockquote>',
                                  reply_markup=markup, parse_mode='HTML')
     set_owner_fn(call.message.message_id, call.from_user.id)
     await call.answer()
@@ -613,7 +613,7 @@ async def cb_request_amount(call: CallbackQuery, state: FSMContext):
         InlineKeyboardButton(text="Отмена", callback_data="cancel_bet", icon_custom_emoji_id=EMOJI_BACK)
     ]])
     await call.message.edit_text(
-        f"<blockquote><b><tg-emoji emoji-id="5197269100878907942">👋</tg-emoji> Введите сумму ставки</b></blockquote>\n\n",
+        f'<blockquote><b><tg-emoji emoji-id="5197269100878907942">👋</tg-emoji> Введите сумму ставки</b></blockquote>\n\n',
         parse_mode='HTML', reply_markup=markup
     )
     set_owner_fn(call.message.message_id, uid)
