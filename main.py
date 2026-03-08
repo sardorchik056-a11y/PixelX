@@ -20,6 +20,7 @@ import game as _game_module
 import tower as _tower_module
 import mines as _mines_module
 import gold as _gold_module
+import treyd as _treyd_module
 
 from mine import mine_router, mine_watchdog
 from referrals import referral_router
@@ -28,6 +29,7 @@ from game import game_router, game_low_router, init_game
 from tower import tower_router
 from mines import mines_router
 from gold import gold_router
+from treyd import exchange_router, exchange_watchdog
 
 from database import (
     init_db,
@@ -44,6 +46,7 @@ from database import (
     db_create_promo,
     db_use_promo,
 )
+from treyd_db import init_exchange_db
 
 load_dotenv()
 
@@ -73,22 +76,17 @@ TRANSFER_COOLDOWN = 10   # секунд между переводами
 
 # ─────────────────────────────────────────
 #  Rate limiting промокодов
-#  Не более PROMO_MAX_ATTEMPTS попыток за PROMO_WINDOW секунд
-#  После превышения — бан на PROMO_BAN_TIME секунд
 # ─────────────────────────────────────────
-PROMO_MAX_ATTEMPTS = 5     # попыток
-PROMO_WINDOW       = 60    # за 60 секунд
-PROMO_BAN_TIME     = 300   # бан 5 минут после превышения
+PROMO_MAX_ATTEMPTS = 5
+PROMO_WINDOW       = 60
+PROMO_BAN_TIME     = 300
 
-# uid -> список timestamp'ов попыток
 _promo_attempts: dict[int, list[float]] = {}
-# uid -> timestamp окончания бана
 _promo_banned:   dict[int, float]       = {}
 
 # ─────────────────────────────────────────
-#  Словари кулдаунов (очищаются фоновой задачей)
+#  Кулдауны переводов
 # ─────────────────────────────────────────
-# uid -> timestamp последнего перевода
 _transfer_cooldowns: dict[int, float] = {}
 
 # ─────────────────────────────────────────
@@ -155,6 +153,10 @@ def inject_to_modules(bot: Bot):
     _mines_module.set_owner_fn = set_owner
     _gold_module.is_owner_fn  = is_owner
     _gold_module.set_owner_fn = set_owner
+    # ── Биржа ──
+    _treyd_module.is_owner_fn  = is_owner
+    _treyd_module.set_owner_fn = set_owner
+    _treyd_module.set_bot_ref(bot)
 
 
 # ─────────────────────────────────────────
@@ -170,7 +172,7 @@ class PromoStates(StatesGroup):
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp  = Dispatcher(storage=MemoryStorage())
 
-# ── Роутеры других модулей подключаются ПЕРВЫМИ ──
+# ── Роутеры подключаются в порядке приоритета ──
 dp.include_router(mine_router)
 dp.include_router(referral_router)
 dp.include_router(bonus_router)
@@ -178,21 +180,19 @@ dp.include_router(game_router)
 dp.include_router(tower_router)
 dp.include_router(mines_router)
 dp.include_router(gold_router)
+dp.include_router(exchange_router)   # ← Биржа
 
-# ── Роутер с низким приоритетом (баланс) — подключится ПОСЛЕДНИМ в конце файла ──
 low_priority_router = Router()
 
 
 # ─────────────────────────────────────────
 #  Фоновая задача: очистка устаревших записей
-#  Запускается раз в 5 минут
 # ─────────────────────────────────────────
 async def _cleanup_task():
     while True:
-        await asyncio.sleep(300)  # каждые 5 минут
+        await asyncio.sleep(300)
         now = time.monotonic()
 
-        # Очищаем кулдауны переводов старше 60 сек (давно истекли)
         expired_transfers = [
             uid for uid, ts in _transfer_cooldowns.items()
             if now - ts > 60
@@ -200,7 +200,6 @@ async def _cleanup_task():
         for uid in expired_transfers:
             del _transfer_cooldowns[uid]
 
-        # Очищаем истёкшие баны промокодов
         expired_bans = [
             uid for uid, ts in _promo_banned.items()
             if now > ts
@@ -208,7 +207,6 @@ async def _cleanup_task():
         for uid in expired_bans:
             del _promo_banned[uid]
 
-        # Очищаем устаревшие окна попыток промокодов
         expired_attempts = [
             uid for uid, attempts in _promo_attempts.items()
             if not attempts or now - attempts[-1] > PROMO_WINDOW
@@ -218,14 +216,11 @@ async def _cleanup_task():
 
 
 # ─────────────────────────────────────────
-#  Хэлпер: проверка rate limit промокодов
-#  Возвращает None если всё ок,
-#  или строку с текстом ошибки если заблокирован
+#  Rate limit промокодов
 # ─────────────────────────────────────────
 def _check_promo_rate_limit(uid: int) -> str | None:
     now = time.monotonic()
 
-    # Проверяем бан
     ban_until = _promo_banned.get(uid, 0)
     if now < ban_until:
         wait = int(ban_until - now)
@@ -240,12 +235,10 @@ def _check_promo_rate_limit(uid: int) -> str | None:
             f'<blockquote>Попробуйте через <b>{time_str}</b></blockquote>'
         )
 
-    # Обновляем окно попыток — оставляем только те что в пределах PROMO_WINDOW
     attempts = _promo_attempts.get(uid, [])
     attempts = [ts for ts in attempts if now - ts < PROMO_WINDOW]
 
     if len(attempts) >= PROMO_MAX_ATTEMPTS:
-        # Превышен лимит — баним
         _promo_banned[uid]   = now + PROMO_BAN_TIME
         _promo_attempts[uid] = []
         minutes = PROMO_BAN_TIME // 60
@@ -255,7 +248,6 @@ def _check_promo_rate_limit(uid: int) -> str | None:
             f'Попробуйте через <b>{minutes} мин.</b></blockquote>'
         )
 
-    # Фиксируем попытку
     attempts.append(now)
     _promo_attempts[uid] = attempts
     return None
@@ -436,16 +428,14 @@ def build_stats_text(user: dict) -> str:
 #  Разделы в разработке
 # ─────────────────────────────────────────
 DEV_SECTIONS = {
-    "leaders":  "Лидеры",
-    "exchange": "Биржа",
+    "leaders": "Лидеры",
 }
 
 
 # ─────────────────────────────────────────
-#  Хэлпер: активация промокода (с rate limit)
+#  Активация промокода (с rate limit)
 # ─────────────────────────────────────────
 async def _activate_promo(uid: int, code: str) -> str:
-    # Проверяем rate limit ДО обращения к БД
     rate_error = _check_promo_rate_limit(uid)
     if rate_error:
         return rate_error
@@ -453,7 +443,6 @@ async def _activate_promo(uid: int, code: str) -> str:
     result = db_use_promo(uid, code)
 
     if result["ok"]:
-        # Успешная активация — сбрасываем счётчик попыток
         _promo_attempts.pop(uid, None)
         _promo_banned.pop(uid, None)
         reward = result["reward"]
@@ -471,8 +460,8 @@ async def _activate_promo(uid: int, code: str) -> str:
         elif reason == "expired":
             detail = "Промокод уже использован максимальное количество раз."
         elif reason == "already_used":
-            # Уже активированный — не считаем за попытку брутфорса
-            _promo_attempts[uid].pop() if _promo_attempts.get(uid) else None
+            if _promo_attempts.get(uid):
+                _promo_attempts[uid].pop()
             detail = "Вы уже активировали этот промокод."
         else:
             detail = "Неизвестная ошибка."
@@ -487,7 +476,7 @@ async def _activate_promo(uid: int, code: str) -> str:
 
 
 # ─────────────────────────────────────────
-#  Хэндлеры — основные (регистрируются в dp)
+#  /start
 # ─────────────────────────────────────────
 @dp.message(CommandStart())
 async def cmd_start(message: Message, command: CommandObject, state: FSMContext):
@@ -525,6 +514,9 @@ async def cmd_start(message: Message, command: CommandObject, state: FSMContext)
     set_owner(sent.message_id, uid)
 
 
+# ─────────────────────────────────────────
+#  Главное меню
+# ─────────────────────────────────────────
 @dp.callback_query(F.data == "main_menu")
 async def cb_main_menu(call: CallbackQuery, state: FSMContext):
     if not is_owner(call.message.message_id, call.from_user.id):
@@ -535,6 +527,9 @@ async def cb_main_menu(call: CallbackQuery, state: FSMContext):
     await call.answer()
 
 
+# ─────────────────────────────────────────
+#  Профиль
+# ─────────────────────────────────────────
 @dp.callback_query(F.data == "profile")
 async def cb_profile(call: CallbackQuery):
     if not is_owner(call.message.message_id, call.from_user.id):
@@ -564,6 +559,9 @@ async def cb_buy_px(call: CallbackQuery):
     await call.answer()
 
 
+# ─────────────────────────────────────────
+#  О проекте
+# ─────────────────────────────────────────
 @dp.callback_query(F.data == "about")
 async def cb_about(call: CallbackQuery):
     if not is_owner(call.message.message_id, call.from_user.id):
@@ -573,6 +571,9 @@ async def cb_about(call: CallbackQuery):
     await call.answer()
 
 
+# ─────────────────────────────────────────
+#  Разделы в разработке
+# ─────────────────────────────────────────
 @dp.callback_query(F.data.in_(DEV_SECTIONS.keys()))
 async def cb_dev_section(call: CallbackQuery):
     if not is_owner(call.message.message_id, call.from_user.id):
@@ -583,7 +584,7 @@ async def cb_dev_section(call: CallbackQuery):
 
 
 # ─────────────────────────────────────────
-#  Промокоды — кнопка в боте (FSM)
+#  Промокоды — FSM
 # ─────────────────────────────────────────
 @dp.callback_query(F.data == "promocodes")
 async def cb_promocodes(call: CallbackQuery, state: FSMContext):
@@ -646,7 +647,7 @@ async def handle_promo_input(message: Message, state: FSMContext):
 
 
 # ─────────────────────────────────────────
-#  Промокоды — команды для чата (/promo, promo, промо)
+#  Промокоды — команды /promo, promo, промо
 # ─────────────────────────────────────────
 @dp.message(Command("promo"))
 async def cmd_promo_slash(message: Message, command: CommandObject):
@@ -681,8 +682,6 @@ async def cmd_promo_text(message: Message):
 
 # ─────────────────────────────────────────
 #  Перевод Px — /pay /gift /дать
-#  Мин: 1 Px  |  Макс: 100 000 000 Px
-#  Кулдаун: 10 секунд между переводами
 # ─────────────────────────────────────────
 async def _handle_transfer(message: Message, amount_str: str):
     sender = message.from_user
@@ -723,7 +722,6 @@ async def _handle_transfer(message: Message, amount_str: str):
         )
         return
 
-    # Проверка кулдауна
     now       = time.monotonic()
     last_time = _transfer_cooldowns.get(uid, 0)
     elapsed   = now - last_time
@@ -741,11 +739,9 @@ async def _handle_transfer(message: Message, amount_str: str):
 
     success = db_try_spend_px(uid, amount)
     if not success:
-        return  # недостаточно средств — тихо игнорируем
+        return
 
-    # Обновляем кулдаун только после успешного списания
     _transfer_cooldowns[uid] = now
-
     db_add_px(target_user.id, amount)
 
     sender_name = f"<a href='tg://user?id={uid}'>{sender.first_name}</a>"
@@ -777,7 +773,7 @@ async def cmd_dat(message: Message, command: CommandObject):
 
 
 # ─────────────────────────────────────────
-#  Промокоды — команда админа /addpromo
+#  /addpromo — команда админа
 # ─────────────────────────────────────────
 @dp.message(Command("addpromo"))
 async def cmd_addpromo(message: Message):
@@ -837,7 +833,7 @@ async def cmd_addpromo(message: Message):
 
 
 # ─────────────────────────────────────────
-#  Баланс — регистрируется в low_priority_router ПОСЛЕДНИМ
+#  Баланс — low_priority_router
 # ─────────────────────────────────────────
 _BALANCE_WORDS = {
     "б", "b",
@@ -852,7 +848,6 @@ async def cmd_balance_text(message: Message):
 
     if " " in text or "\n" in text:
         return
-
     if text.lower() not in _BALANCE_WORDS:
         return
 
@@ -884,9 +879,11 @@ dp.include_router(game_low_router)
 # ─────────────────────────────────────────
 async def main():
     init_db()
+    init_exchange_db()                          # ← таблицы биржи
     inject_to_modules(bot)
     asyncio.create_task(mine_watchdog())
-    asyncio.create_task(_cleanup_task())   # фоновая очистка словарей
+    asyncio.create_task(exchange_watchdog())    # ← возврат Px по истёкшим лотам
+    asyncio.create_task(_cleanup_task())
     print("✅ Бот запущен!")
     await dp.start_polling(bot)
 
