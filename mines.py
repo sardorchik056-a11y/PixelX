@@ -279,7 +279,7 @@ def game_text(session: dict) -> str:
         f'<tg-emoji emoji-id="5397782960512444700">👋</tg-emoji>Текущий: <b><code>x{mult}</code></b>\n'
         f'<tg-emoji emoji-id="5416117059207572332">👋</tg-emoji>Следующий: <b><code>x{next_mult}</code></b>\n'
         f"</blockquote>\n\n"
-        f"<blockquote><b><i>Выберите безопасную ячейку!</i></b></blockquote>"
+        f"<blockquote><b><i>Выберите безопасную ячейку ниже!</i></b></blockquote>"
     )
 
 
@@ -468,7 +468,7 @@ async def mines_cell_handler(callback: CallbackQuery, state: FSMContext):
                 f'<tg-emoji emoji-id="5429518319243775957">👋</tg-emoji>Потеряно: <code>{bet}</code> Px\n'
                 f'<tg-emoji emoji-id="5278467510604160626">👋</tg-emoji>Баланс: <code>{balance:.2f}</code> Px'
                 f"</blockquote>\n\n"
-                f"<blockquote><b><i>Это не повод сдаваться!</i></b></blockquote>",
+                f"<blockquote><b><i>Это не повод сдаваться! попробуй снова!</i></b></blockquote>",
                 parse_mode=ParseMode.HTML,
                 reply_markup=build_game_keyboard(session, game_over=True)
             )
