@@ -439,7 +439,7 @@ def games_keyboard() -> InlineKeyboardMarkup:
         [
             InlineKeyboardButton(text="🏰 Башня",     callback_data="tower_menu"),
             InlineKeyboardButton(text="💣 Мины",      callback_data="mines_menu"),
-            InlineKeyboardButton(text="⛏ Золото",    callback_data="gold_menu"),
+            InlineKeyboardButton(text="💰 Золото",    callback_data="gold_menu"),
         ],
         [
             InlineKeyboardButton(text="Назад", callback_data="main_menu", icon_custom_emoji_id=EMOJI_BACK),
@@ -449,15 +449,15 @@ def games_keyboard() -> InlineKeyboardMarkup:
 
 GAMES_TEXT = (
     '<b><tg-emoji emoji-id="5424972470023104089">👋</tg-emoji> Игры</b>\n\n'
-    '<blockquote><b><tg-emoji emoji-id="5197269100878907942">👋</tg-emoji>Текстовые команды:</b>\n\n'
+    '<blockquote><b><tg-emoji emoji-id="5197269100878907942">👋</tg-emoji>Текстовые команды:</b>\n'
     "  <code>куб (исход) (сумма)</code>\n"
     "  <code>баскет (исход) (сумма)</code>\n"
     "  <code>фут (исход) (сумма)</code>\n"
     "  <code>дартс (исход) (сумма)</code>\n"
     "  <code>боулинг (исход) (сумма)</code>\n"
-    "<code>мины (сумма) (сложность)</code>\n"
-    "<code>башня (сумма) (сложность)</code>\n"
-    "<code>золото (сумма)</code>\n"
+    "  <code>мины (сумма) (сложность)</code>\n"
+    "  <code>башня (сумма) (сложность)</code>\n"
+    "  <code>золото (сумма)</code>\n"
     "</blockquote>"
 )
 
