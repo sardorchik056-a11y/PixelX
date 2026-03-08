@@ -479,8 +479,8 @@ async def handle_promo_input(message: Message, state: FSMContext):
         text = (
             f'<tg-emoji emoji-id="{EMOJI_PROMO}">🎟</tg-emoji> <b>Промокод активирован!</b>\n\n'
             f'<blockquote>'
-            f'✅  Промокод <code>{code.upper()}</code> успешно применён.\n'
-            f'<tg-emoji emoji-id="{EMOJI_GOLD}">⚡</tg-emoji>  Начислено: <b>{reward:,.2f} Px</b>'
+            f'<tg-emoji emoji-id="5206607081334906820">🎟</tg-emoji> Промокод <code>{code.upper()}</code> успешно активирован!\n'
+            f'<tg-emoji emoji-id="5429651785352501917">⚡</tg-emoji>  Начислено: <b>{reward:,.2f} Px</b>'
             f'</blockquote>'
         )
     else:
@@ -497,9 +497,7 @@ async def handle_promo_input(message: Message, state: FSMContext):
         text = (
             f'<tg-emoji emoji-id="{EMOJI_PROMO}">🎟</tg-emoji> <b>Промокоды</b>\n\n'
             f'<blockquote>'
-            f'❌  <b>Не удалось активировать промокод.</b>\n'
-            f'{detail}\n\n'
-            f'🔤 Попробуйте ввести другой промокод.'
+            f'<tg-emoji emoji-id="5210952531676504517">🎟</tg-emoji> <b>Не удалось активировать промокод!</b>'
             f'</blockquote>'
         )
 
@@ -557,7 +555,7 @@ async def cmd_addpromo(message: Message):
         if reward <= 0:
             raise ValueError
     except ValueError:
-        await message.answer("❌ Сумма должна быть положительным числом.")
+        await message.answer("❌ Сумма должна быть положительным числом!")
         return
 
     try:
@@ -565,7 +563,7 @@ async def cmd_addpromo(message: Message):
         if max_uses <= 0:
             raise ValueError
     except ValueError:
-        await message.answer("❌ Количество активаций должно быть целым положительным числом.")
+        await message.answer("❌ Количество активаций должно быть целым положительным числом!")
         return
 
     created = db_create_promo(code, reward, max_uses)
@@ -574,15 +572,15 @@ async def cmd_addpromo(message: Message):
         await message.answer(
             f'<tg-emoji emoji-id="{EMOJI_PROMO}">🎟</tg-emoji> <b>Промокод создан!</b>\n\n'
             f'<blockquote>'
-            f'🔑  Код: <code>{code}</code>\n'
-            f'<tg-emoji emoji-id="{EMOJI_GOLD}">⚡</tg-emoji>  Награда: <b>{reward:,.2f} Px</b>\n'
-            f'🔢  Активаций: <b>{max_uses}</b>'
+            f'<tg-emoji emoji-id="5271604874419647061">🎟</tg-emoji>  Код: <code>{code}</code>\n'
+            f'<tg-emoji emoji-id="5427168083074628963">⚡</tg-emoji>  Награда: <b>{reward:,.2f} Px</b>\n'
+            f'<tg-emoji emoji-id="5201691993775818138">🎟</tg-emoji>  Активаций: <b>{max_uses}</b>'
             f'</blockquote>'
         )
     else:
         await message.answer(
-            f'❌ Промокод <code>{code}</code> уже существует.\n'
-            f'Выберите другой код.'
+            f'❌ Промокод <code>{code}</code> уже существует!\n'
+            f'Выберите другой код!'
         )
 
 
