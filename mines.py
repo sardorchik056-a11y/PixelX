@@ -353,7 +353,7 @@ async def mines_manual_handler(callback: CallbackQuery, state: FSMContext):
     await state.update_data(mines_count=None, waiting_manual=True)
     await state.set_state(MinesGame.choosing_bet)
     await callback.message.edit_text(
-        "<blockquote><b><tg-emoji emoji-id="5197269100878907942">👋</tg-emoji> Введите количество мин (от 2 до 24):</b></blockquote>",
+        '<blockquote><b><tg-emoji emoji-id="5197269100878907942">👋</tg-emoji> Введите количество мин (от 2 до 24):</b></blockquote>',
         parse_mode=ParseMode.HTML,
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
             InlineKeyboardButton(text="Назад", callback_data="mines_back_select",
