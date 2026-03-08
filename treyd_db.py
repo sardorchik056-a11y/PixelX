@@ -1,5 +1,11 @@
 """
 treyd_db.py — База данных модуля Биржи
+
+Изменения v3:
+  • db_count_active_listings_by_seller — лимит 5 лотов
+  • db_get_active_listings — фильтрация по диапазону Px (px_min, px_max)
+  • db_mark_listing_sold_atomic — атомарная продажа (защита от дублей/race condition)
+  • db_get_buyer_stats — статистика покупок (кол-во, Px, $)
 """
 
 import sqlite3
@@ -80,6 +86,7 @@ def init_exchange_db():
         CREATE INDEX IF NOT EXISTS idx_ex_listings_status   ON exchange_listings(status);
         CREATE INDEX IF NOT EXISTS idx_ex_listings_expires  ON exchange_listings(expires_at);
         CREATE INDEX IF NOT EXISTS idx_ex_listings_seller   ON exchange_listings(seller_id);
+        CREATE INDEX IF NOT EXISTS idx_ex_listings_buyer    ON exchange_listings(buyer_id);
         CREATE INDEX IF NOT EXISTS idx_ex_invoices_lot      ON exchange_invoices(lot_id);
         CREATE INDEX IF NOT EXISTS idx_ex_withdrawals_user  ON exchange_withdrawals(user_id);
         CREATE INDEX IF NOT EXISTS idx_ex_wreq_status       ON exchange_withdraw_requests(status);
@@ -131,21 +138,44 @@ def db_create_listing(
         return cur.lastrowid
 
 
-def db_get_active_listings(exclude_uid: Optional[int] = None) -> list[dict]:
+def db_count_active_listings_by_seller(seller_id: int) -> int:
+    """Количество активных лотов продавца (для лимита)."""
+    now = datetime.now().isoformat()
+    with get_conn() as conn:
+        row = conn.execute("""
+            SELECT COUNT(*) as cnt FROM exchange_listings
+            WHERE seller_id=? AND status='active' AND expires_at > ?
+        """, (seller_id, now)).fetchone()
+        return row["cnt"] if row else 0
+
+
+def db_get_active_listings(
+    exclude_uid: Optional[int] = None,
+    px_min: float = 0,
+    px_max: float = 10_000_000_000,
+) -> list[dict]:
+    """Активные лоты с опциональным фильтром по диапазону Px."""
     now = datetime.now().isoformat()
     with get_conn() as conn:
         if exclude_uid:
             rows = conn.execute("""
                 SELECT * FROM exchange_listings
-                WHERE status='active' AND expires_at > ? AND seller_id != ?
+                WHERE status='active'
+                  AND expires_at > ?
+                  AND seller_id != ?
+                  AND px_amount >= ?
+                  AND px_amount <= ?
                 ORDER BY created_at DESC
-            """, (now, exclude_uid)).fetchall()
+            """, (now, exclude_uid, px_min, px_max)).fetchall()
         else:
             rows = conn.execute("""
                 SELECT * FROM exchange_listings
-                WHERE status='active' AND expires_at > ?
+                WHERE status='active'
+                  AND expires_at > ?
+                  AND px_amount >= ?
+                  AND px_amount <= ?
                 ORDER BY created_at DESC
-            """, (now,)).fetchall()
+            """, (now, px_min, px_max)).fetchall()
         return [dict(r) for r in rows]
 
 
@@ -170,6 +200,7 @@ def db_get_listing(listing_id: int) -> Optional[dict]:
 
 
 def db_mark_listing_sold(listing_id: int, buyer_id: int):
+    """Пометить лот проданным (без атомарности, для внутреннего использования)."""
     with get_conn() as conn:
         conn.execute("""
             UPDATE exchange_listings SET status='sold', buyer_id=?
@@ -177,8 +208,23 @@ def db_mark_listing_sold(listing_id: int, buyer_id: int):
         """, (buyer_id, listing_id))
 
 
+def db_mark_listing_sold_atomic(listing_id: int, buyer_id: int) -> bool:
+    """
+    Атомарно помечает лот проданным.
+    Возвращает True если успешно (лот был active и теперь sold).
+    Возвращает False если лот уже был куплен другим (race condition/дубль).
+    SQLite гарантирует атомарность UPDATE — только один поток выиграет.
+    """
+    with get_conn() as conn:
+        cur = conn.execute("""
+            UPDATE exchange_listings
+            SET status='sold', buyer_id=?
+            WHERE id=? AND status='active'
+        """, (buyer_id, listing_id))
+        return cur.rowcount > 0
+
+
 def db_cancel_listing_by_owner(listing_id: int, seller_id: int) -> bool:
-    """Отмена лота владельцем. Возвращает True если лот был активным."""
     with get_conn() as conn:
         cur = conn.execute("""
             UPDATE exchange_listings SET status='cancelled'
@@ -219,8 +265,25 @@ def db_get_seller_stats(seller_id: int) -> dict:
         }
 
 
+def db_get_buyer_stats(buyer_id: int) -> dict:
+    """Статистика покупок: кол-во лотов, суммарно Px, суммарно потрачено $."""
+    with get_conn() as conn:
+        row = conn.execute("""
+            SELECT
+                COUNT(*) as total_buys,
+                COALESCE(SUM(px_amount), 0) as total_px_received,
+                COALESCE(SUM(price_per_10k * px_amount / 10000.0), 0) as total_spent
+            FROM exchange_listings
+            WHERE buyer_id=? AND status='sold'
+        """, (buyer_id,)).fetchone()
+        return {
+            "total_buys":        row["total_buys"]              if row else 0,
+            "total_px_received": float(row["total_px_received"]) if row else 0.0,
+            "total_spent":       float(row["total_spent"])       if row else 0.0,
+        }
+
+
 def db_get_seller_last_sales(seller_id: int, limit: int = 5) -> list[dict]:
-    """Последние N продаж продавца (для /check)."""
     with get_conn() as conn:
         rows = conn.execute("""
             SELECT * FROM exchange_listings
@@ -259,7 +322,7 @@ def db_mark_invoice_paid(invoice_id: int):
         )
 
 
-# ── Заявки на вывод (ручное одобрение) ─────────────────────
+# ── Заявки на вывод ─────────────────────────────────────────
 def db_create_withdraw_request(
     user_id: int, username: str, amount_usd: float, net_usd: float
 ) -> int:
@@ -290,7 +353,6 @@ def db_get_pending_withdraw_requests() -> list[dict]:
 
 
 def db_approve_withdraw_request(req_id: int) -> Optional[dict]:
-    """Одобрить заявку. Возвращает данные заявки или None если не pending."""
     now = datetime.now().isoformat()
     with get_conn() as conn:
         row = conn.execute(
@@ -304,7 +366,6 @@ def db_approve_withdraw_request(req_id: int) -> Optional[dict]:
             SET status='approved', resolved_at=?
             WHERE id=?
         """, (now, req_id))
-        # Пишем в историю
         conn.execute("""
             INSERT INTO exchange_withdrawals(user_id, amount_usd, net_usd)
             VALUES(?, ?, ?)
@@ -313,7 +374,6 @@ def db_approve_withdraw_request(req_id: int) -> Optional[dict]:
 
 
 def db_reject_withdraw_request(req_id: int) -> Optional[dict]:
-    """Отклонить заявку. Возвращает данные или None если не pending."""
     now = datetime.now().isoformat()
     with get_conn() as conn:
         row = conn.execute(
