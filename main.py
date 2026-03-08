@@ -157,6 +157,7 @@ def inject_to_modules(bot: Bot):
     _treyd_module.is_owner_fn  = is_owner
     _treyd_module.set_owner_fn = set_owner
     _treyd_module.set_bot_ref(bot)
+    _treyd_module.set_admin_ids(ADMIN_IDS)
 
 
 # ─────────────────────────────────────────
