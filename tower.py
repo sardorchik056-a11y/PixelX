@@ -122,15 +122,9 @@ async def _inactivity_watcher(user_id: int, bot: Bot):
             await bot.edit_message_text(
                 chat_id=chat_id, message_id=msg_id,
                 text=(
-                    "<blockquote><b>⏰ Игра закрыта</b></blockquote>\n\n"
-                    f"<blockquote>🏰 Башня\n"
-                    f"Ставка <code>{bet}</code> Px возвращена\n</blockquote>\n\n"
-                    "<blockquote><i>Игра завершена по таймауту (5 минут).</i></blockquote>"
+                    "<blockquote><b>⏰ Игра закрыта!</b></blockquote>",
                 ),
                 parse_mode="HTML",
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
-                    InlineKeyboardButton(text="🏰 Играть снова", callback_data="tower_menu")
-                ]])
             )
         except Exception:
             pass
@@ -164,13 +158,7 @@ def _active_game_error_text(session: dict) -> str:
     floors_passed = session['floors_passed']
     mult          = get_multiplier(diff, floors_passed)
     return (
-        f"<blockquote><b>⚠️ У вас уже есть активная игра!</b></blockquote>\n\n"
-        f"<blockquote>"
-        f"🏰 Сложность: <b>{DIFFICULTY_EMOJI[diff]} {DIFFICULTY_NAMES[diff]}</b>\n"
-        f"Ставка: <code>{bet}</code> Px\n"
-        f"Пройдено: <b>{floors_passed}/{FLOORS}</b> | <b>x{mult}</b>\n"
-        f"</blockquote>\n\n"
-        f"<blockquote><i>Завершите текущую игру.</i></blockquote>"
+        f"<blockquote><b>⚠️ У вас уже есть активная игра!</b></blockquote>"
     )
 
 
@@ -265,12 +253,12 @@ def build_tower_keyboard(session: dict, game_over: bool = False) -> InlineKeyboa
 def build_tower_select_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text="1 💣 (20%)", callback_data="tower_diff_1"),
-            InlineKeyboardButton(text="2 💣 (40%)", callback_data="tower_diff_2"),
+            InlineKeyboardButton(text="1 💣", callback_data="tower_diff_1"),
+            InlineKeyboardButton(text="2 💣", callback_data="tower_diff_2"),
         ],
         [
-            InlineKeyboardButton(text="3 💣 (60%)", callback_data="tower_diff_3"),
-            InlineKeyboardButton(text="4 💣 (80%)", callback_data="tower_diff_4"),
+            InlineKeyboardButton(text="3 💣", callback_data="tower_diff_3"),
+            InlineKeyboardButton(text="4 💣", callback_data="tower_diff_4"),
         ],
         [InlineKeyboardButton(text="Назад", callback_data="games", icon_custom_emoji_id=EMOJI_BACK)],
     ])
@@ -287,11 +275,11 @@ def game_text(session: dict) -> str:
     return (
         f"<blockquote><b>🏰 Башня</b></blockquote>\n\n"
         f"<blockquote>"
-        f"Ставка: <code>{bet}</code> Px\n"
+        f'<tg-emoji emoji-id="5199552030615558774">👋</tg-emoji>Ставка: <code>{bet}</code> Px\n'
         f"{DIFFICULTY_EMOJI[diff]} Сложность: <b>{DIFFICULTY_NAMES[diff]}</b> ({num_bombs} 💣 из {CELLS})\n"
-        f"Этаж: <b>{floor_num}/{FLOORS}</b>\n"
-        f"Текущий: <b><code>x{mult}</code></b>\n"
-        f"Следующий: <b><code>x{next_mult}</code></b>\n"
+        f'<tg-emoji emoji-id="5415655814079723871">👋</tg-emoji>Этаж: <b>{floor_num}/{FLOORS}</b>\n'
+        f'<tg-emoji emoji-id="5391032818111363540">👋</tg-emoji>Текущий: <b><code>x{mult}</code></b>\n'
+        f'<tg-emoji emoji-id="5416117059207572332">👋</tg-emoji>Следующий: <b><code>x{next_mult}</code></b>\n'
         f"</blockquote>\n\n"
         f"<blockquote><b><i>Выберите безопасную ячейку!</i></b></blockquote>"
     )
@@ -306,8 +294,7 @@ async def show_tower_menu(callback: CallbackQuery):
     balance = db_get_px(user_id)
     await callback.message.edit_text(
         f"<blockquote><b>🏰 Башня</b></blockquote>\n\n"
-        f"<blockquote><b>Баланс: <code>{balance:.2f}</code> Px</b></blockquote>\n\n"
-        f"<blockquote><b>Выберите сложность:</b></blockquote>",
+        f"<blockquote><b>Выберите сложность ниже:</b></blockquote>",
         parse_mode=ParseMode.HTML,
         reply_markup=build_tower_select_keyboard()
     )
@@ -338,9 +325,7 @@ async def tower_diff_handler(callback: CallbackQuery, state: FSMContext):
 
     balance = db_get_px(user_id)
     await callback.message.edit_text(
-        f"<blockquote><b>✏️ Введите сумму ставки:</b>\n"
-        f"Баланс: <code>{balance:.2f}</code> Px\n"
-        f"Мин: <code>{MIN_BET}</code> | Макс: <code>{int(MAX_BET):,}</code></blockquote>",
+        f'<blockquote><b><tg-emoji emoji-id="5197269100878907942">👋</tg-emoji> Введите сумму ставки:</b></blockquote>',
         parse_mode=ParseMode.HTML,
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
             InlineKeyboardButton(text="Назад", callback_data="tower_back_select",
@@ -467,8 +452,8 @@ async def tower_cell_handler(callback: CallbackQuery, state: FSMContext):
             await callback.message.edit_text(
                 f"<blockquote><b>💥 Вы попали на бомбу!</b></blockquote>\n\n"
                 f"<blockquote>"
-                f"Потеряно: <code>{bet}</code> Px\n"
-                f"Баланс: <code>{balance:.2f}</code> Px"
+                f"<tg-emoji emoji-id="5429518319243775957">👋</tg-emoji>Потеряно: <code>{bet}</code> Px\n"
+                f"<tg-emoji emoji-id="5278467510604160626">👋</tg-emoji>Баланс: <code>{balance:.2f}</code> Px"
                 f"</blockquote>\n\n"
                 f"<blockquote><b><i>Башня рухнула! Попробуйте снова!</i></b></blockquote>",
                 parse_mode=ParseMode.HTML,
@@ -502,11 +487,11 @@ async def tower_cell_handler(callback: CallbackQuery, state: FSMContext):
 
                 balance = db_get_px(user_id)
                 await callback.message.edit_text(
-                    f"<blockquote><b>🏆 Вы прошли все этажи!</b></blockquote>\n\n"
+                    f"<blockquote><b><tg-emoji emoji-id="5461151367559141950">👋</tg-emoji> Вы прошли все этажи!</b></blockquote>\n\n"
                     f"<blockquote>"
-                    f"Множитель: <b>x{mult}</b>\n"
-                    f"Выигрыш: <code>{winnings}</code> Px\n"
-                    f"Баланс: <code>{balance:.2f}</code> Px"
+                    f"<tg-emoji emoji-id="5201691993775818138">👋</tg-emoji>Множитель: <b>x{mult}</b>\n"
+                    f"<tg-emoji emoji-id="5429651785352501917">👋</tg-emoji>Выигрыш: <code>{winnings}</code> Px\n"
+                    f"<tg-emoji emoji-id="5278467510604160626">👋</tg-emoji>Баланс: <code>{balance:.2f}</code> Px"
                     f"</blockquote>",
                     parse_mode=ParseMode.HTML,
                     reply_markup=InlineKeyboardMarkup(inline_keyboard=[
@@ -518,7 +503,7 @@ async def tower_cell_handler(callback: CallbackQuery, state: FSMContext):
                 )
                 set_owner_fn(msg_id, user_id)
                 _game_board_owner[msg_id] = user_id
-                await callback.answer("🏆 Победа!")
+                await callback.answer(" Победа!")
             else:
                 await callback.message.edit_text(
                     game_text(session), parse_mode=ParseMode.HTML,
@@ -571,11 +556,11 @@ async def tower_cashout(callback: CallbackQuery, state: FSMContext):
 
     balance = db_get_px(user_id)
     await callback.message.edit_text(
-        f"<blockquote><b>💰 Кэшаут!</b></blockquote>\n\n"
+        f"<blockquote><b><tg-emoji emoji-id="5461151367559141950">👋</tg-emoji> Кэшаут!</b></blockquote>\n\n"
         f"<blockquote>"
-        f"Множитель: <b>x{mult}</b>\n"
-        f"Выигрыш: <code>{winnings}</code> Px\n"
-        f"Баланс: <code>{balance:.2f}</code> Px"
+        f"<tg-emoji emoji-id="5201691993775818138">👋</tg-emoji>Множитель: <b>x{mult}</b>\n"
+        f"<tg-emoji emoji-id="5429651785352501917">👋</tg-emoji>Выигрыш: <code>{winnings}</code> Px\n"
+        f"<tg-emoji emoji-id="5278467510604160626">👋</tg-emoji>Баланс: <code>{balance:.2f}</code> Px"
         f"</blockquote>",
         parse_mode=ParseMode.HTML,
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
@@ -587,7 +572,7 @@ async def tower_cashout(callback: CallbackQuery, state: FSMContext):
     )
     set_owner_fn(msg_id, user_id)
     _game_board_owner[msg_id] = user_id
-    await callback.answer(f"💰 +{winnings}!")
+    await callback.answer(f" +{winnings}!")
 
 
 @tower_router.callback_query(F.data == "tower_cashout_again")
@@ -636,7 +621,7 @@ async def process_tower_bet(message: Message, state: FSMContext):
         try:
             bet = float(message.text.replace(',', '.'))
         except ValueError:
-            await message.answer("❌ Введите корректную сумму."); return
+            await message.answer("❌ Введите корректную сумму!"); return
 
         if bet < MIN_BET:
             await message.answer(f"❌ Минимальная ставка: <code>{MIN_BET}</code> Px", parse_mode="HTML"); return
