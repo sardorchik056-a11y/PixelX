@@ -253,8 +253,7 @@ ABOUT_TEXT = (
 PROMO_INPUT_TEXT = (
     f'<tg-emoji emoji-id="{EMOJI_PROMO}">🎟</tg-emoji> <b>Промокоды</b>\n\n'
     f'<blockquote>'
-    f'Введите промокод в чат и получите награду в Px!\n\n'
-    f'🔤 Регистр не важен — код принимается в любом виде.'
+    f'<tg-emoji emoji-id="5197269100878907942">🎟</tg-emoji>Введите промокод в чат регистр не важен!'
     f'</blockquote>'
 )
 
