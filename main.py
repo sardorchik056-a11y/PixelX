@@ -56,10 +56,10 @@ if not BOT_TOKEN:
     )
 
 # ─────────────────────────────────────────
-#  Админы — впишите сюда свои Telegram ID
+#  Админы
 # ─────────────────────────────────────────
 ADMIN_IDS: list[int] = [
-    8476835256, 8118184388, # ← замените на ваш Telegram ID
+    8476835256, 8118184388,
 ]
 
 # ─────────────────────────────────────────
@@ -331,11 +331,49 @@ DEV_SECTIONS = {
 
 
 # ─────────────────────────────────────────
+#  Хэлпер: активация промокода (общая логика)
+# ─────────────────────────────────────────
+async def _activate_promo(uid: int, code: str) -> str:
+    """
+    Активирует промокод для пользователя и возвращает готовый HTML-текст ответа.
+    Используется как из чата (текстовые команды), так и из FSM кнопки.
+    """
+    result = db_use_promo(uid, code)
+
+    if result["ok"]:
+        reward = result["reward"]
+        return (
+            f'<tg-emoji emoji-id="{EMOJI_PROMO}">🎟</tg-emoji> <b>Промокод активирован!</b>\n\n'
+            f'<blockquote>'
+            f'<tg-emoji emoji-id="5206607081334906820">🎟</tg-emoji> Промокод <code>{code.upper()}</code> успешно активирован!\n'
+            f'<tg-emoji emoji-id="5429651785352501917">⚡</tg-emoji>  Начислено: <b>{reward:,.2f} Px</b>'
+            f'</blockquote>'
+        )
+    else:
+        reason = result["reason"]
+        if reason == "not_found":
+            detail = "Такой промокод не существует."
+        elif reason == "expired":
+            detail = "Промокод уже использован максимальное количество раз."
+        elif reason == "already_used":
+            detail = "Вы уже активировали этот промокод."
+        else:
+            detail = "Неизвестная ошибка."
+
+        return (
+            f'<tg-emoji emoji-id="{EMOJI_PROMO}">🎟</tg-emoji> <b>Промокоды</b>\n\n'
+            f'<blockquote>'
+            f'<tg-emoji emoji-id="5210952531676504517">🎟</tg-emoji> <b>Не удалось активировать промокод!</b>\n'
+            f'{detail}'
+            f'</blockquote>'
+        )
+
+
+# ─────────────────────────────────────────
 #  Хэндлеры — основные
 # ─────────────────────────────────────────
 @dp.message(CommandStart())
 async def cmd_start(message: Message, command: CommandObject, state: FSMContext):
-    # Если пользователь был в FSM промокодов — сбрасываем
     await state.clear()
 
     uid    = message.from_user.id
@@ -428,7 +466,7 @@ async def cb_dev_section(call: CallbackQuery):
 
 
 # ─────────────────────────────────────────
-#  Промокоды — хэндлеры
+#  Промокоды — кнопка в боте (FSM)
 # ─────────────────────────────────────────
 @dp.callback_query(F.data == "promocodes")
 async def cb_promocodes(call: CallbackQuery, state: FSMContext):
@@ -436,7 +474,6 @@ async def cb_promocodes(call: CallbackQuery, state: FSMContext):
         await call.answer("🚫 Это не ваша кнопка!", show_alert=True); return
 
     await state.set_state(PromoStates.waiting_for_code)
-    # Сохраняем message_id чтобы потом удалить или отредактировать
     await state.update_data(promo_msg_id=call.message.message_id)
 
     await call.message.edit_text(PROMO_INPUT_TEXT, reply_markup=cancel_promo_keyboard())
@@ -459,50 +496,20 @@ async def handle_promo_input(message: Message, state: FSMContext):
     uid  = message.from_user.id
     code = message.text.strip() if message.text else ""
 
-    # Удаляем сообщение пользователя сразу
     try:
         await message.delete()
     except Exception:
         pass
 
-    data       = await state.get_data()
+    data         = await state.get_data()
     promo_msg_id = data.get("promo_msg_id")
 
     if not code:
         return
 
-    result = db_use_promo(uid, code)
-
-    if result["ok"]:
-        reward = result["reward"]
-        text = (
-            f'<tg-emoji emoji-id="{EMOJI_PROMO}">🎟</tg-emoji> <b>Промокод активирован!</b>\n\n'
-            f'<blockquote>'
-            f'<tg-emoji emoji-id="5206607081334906820">🎟</tg-emoji> Промокод <code>{code.upper()}</code> успешно активирован!\n'
-            f'<tg-emoji emoji-id="5429651785352501917">⚡</tg-emoji>  Начислено: <b>{reward:,.2f} Px</b>'
-            f'</blockquote>'
-        )
-    else:
-        reason = result["reason"]
-        if reason == "not_found":
-            detail = "Такой промокод не существует."
-        elif reason == "expired":
-            detail = "Промокод уже использован максимальное количество раз."
-        elif reason == "already_used":
-            detail = "Вы уже активировали этот промокод."
-        else:
-            detail = "Неизвестная ошибка."
-
-        text = (
-            f'<tg-emoji emoji-id="{EMOJI_PROMO}">🎟</tg-emoji> <b>Промокоды</b>\n\n'
-            f'<blockquote>'
-            f'<tg-emoji emoji-id="5210952531676504517">🎟</tg-emoji> <b>Не удалось активировать промокод!</b>'
-            f'</blockquote>'
-        )
-
+    text = await _activate_promo(uid, code)
     await state.clear()
 
-    # Редактируем исходное меню-сообщение с результатом
     if promo_msg_id:
         try:
             await bot.edit_message_text(
@@ -517,13 +524,53 @@ async def handle_promo_input(message: Message, state: FSMContext):
         except Exception:
             pass
 
-    # Fallback: отправить новым сообщением
     sent = await message.answer(text, reply_markup=back_main_keyboard())
     set_owner(sent.message_id, uid)
 
 
 # ─────────────────────────────────────────
-#  Промокоды — команда админа
+#  Промокоды — команды для чата (все юзеры)
+#  Работает: /promo КОД  |  promo КОД  |  промо КОД
+#  (со слешем и без, на англ и рус, в любом регистре)
+# ─────────────────────────────────────────
+
+# Слеш-команда: /promo КОД
+@dp.message(Command("promo"))
+async def cmd_promo_slash(message: Message, command: CommandObject):
+    uid  = message.from_user.id
+    code = (command.args or "").strip()
+
+    if not code:
+        await message.reply(
+            f'<tg-emoji emoji-id="{EMOJI_PROMO}">🎟</tg-emoji> <b>Укажите промокод!</b>\n\n'
+            f'<blockquote>Пример: <code>/promo 8MART</code></blockquote>'
+        )
+        return
+
+    db_get_or_create_user(message.from_user)
+    text = await _activate_promo(uid, code)
+    await message.reply(text)
+
+
+# Текстовые варианты без слеша: "promo КОД" и "промо КОД" (любой регистр)
+# Срабатывает только если сообщение начинается с одного из этих слов
+@dp.message(F.text.regexp(r"(?i)^(promo|промо)\s+\S+"))
+async def cmd_promo_text(message: Message):
+    uid  = message.from_user.id
+    # Берём всё после первого слова
+    parts = message.text.split(maxsplit=1)
+    code  = parts[1].strip() if len(parts) > 1 else ""
+
+    if not code:
+        return
+
+    db_get_or_create_user(message.from_user)
+    text = await _activate_promo(uid, code)
+    await message.reply(text)
+
+
+# ─────────────────────────────────────────
+#  Промокоды — команда админа /addpromo
 # ─────────────────────────────────────────
 @dp.message(Command("addpromo"))
 async def cmd_addpromo(message: Message):
@@ -533,8 +580,7 @@ async def cmd_addpromo(message: Message):
         await message.answer("🚫 У вас нет доступа к этой команде.")
         return
 
-    # Ожидаем: /addpromo КОД СУММА АКТИВАЦИИ
-    args = message.text.split(maxsplit=3)[1:]  # убираем /addpromo
+    args = message.text.split(maxsplit=3)[1:]
 
     if len(args) != 3:
         await message.answer(
