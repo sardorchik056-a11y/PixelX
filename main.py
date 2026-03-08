@@ -67,10 +67,27 @@ ADMIN_IDS: list[int] = [
 # ─────────────────────────────────────────
 #  Лимиты перевода
 # ─────────────────────────────────────────
-TRANSFER_MIN        = 1
-TRANSFER_MAX        = 100_000_000
-TRANSFER_COOLDOWN   = 10          # секунд между переводами
+TRANSFER_MIN      = 1
+TRANSFER_MAX      = 100_000_000
+TRANSFER_COOLDOWN = 10   # секунд между переводами
 
+# ─────────────────────────────────────────
+#  Rate limiting промокодов
+#  Не более PROMO_MAX_ATTEMPTS попыток за PROMO_WINDOW секунд
+#  После превышения — бан на PROMO_BAN_TIME секунд
+# ─────────────────────────────────────────
+PROMO_MAX_ATTEMPTS = 5     # попыток
+PROMO_WINDOW       = 60    # за 60 секунд
+PROMO_BAN_TIME     = 300   # бан 5 минут после превышения
+
+# uid -> список timestamp'ов попыток
+_promo_attempts: dict[int, list[float]] = {}
+# uid -> timestamp окончания бана
+_promo_banned:   dict[int, float]       = {}
+
+# ─────────────────────────────────────────
+#  Словари кулдаунов (очищаются фоновой задачей)
+# ─────────────────────────────────────────
 # uid -> timestamp последнего перевода
 _transfer_cooldowns: dict[int, float] = {}
 
@@ -164,6 +181,84 @@ dp.include_router(gold_router)
 
 # ── Роутер с низким приоритетом (баланс) — подключится ПОСЛЕДНИМ в конце файла ──
 low_priority_router = Router()
+
+
+# ─────────────────────────────────────────
+#  Фоновая задача: очистка устаревших записей
+#  Запускается раз в 5 минут
+# ─────────────────────────────────────────
+async def _cleanup_task():
+    while True:
+        await asyncio.sleep(300)  # каждые 5 минут
+        now = time.monotonic()
+
+        # Очищаем кулдауны переводов старше 60 сек (давно истекли)
+        expired_transfers = [
+            uid for uid, ts in _transfer_cooldowns.items()
+            if now - ts > 60
+        ]
+        for uid in expired_transfers:
+            del _transfer_cooldowns[uid]
+
+        # Очищаем истёкшие баны промокодов
+        expired_bans = [
+            uid for uid, ts in _promo_banned.items()
+            if now > ts
+        ]
+        for uid in expired_bans:
+            del _promo_banned[uid]
+
+        # Очищаем устаревшие окна попыток промокодов
+        expired_attempts = [
+            uid for uid, attempts in _promo_attempts.items()
+            if not attempts or now - attempts[-1] > PROMO_WINDOW
+        ]
+        for uid in expired_attempts:
+            del _promo_attempts[uid]
+
+
+# ─────────────────────────────────────────
+#  Хэлпер: проверка rate limit промокодов
+#  Возвращает None если всё ок,
+#  или строку с текстом ошибки если заблокирован
+# ─────────────────────────────────────────
+def _check_promo_rate_limit(uid: int) -> str | None:
+    now = time.monotonic()
+
+    # Проверяем бан
+    ban_until = _promo_banned.get(uid, 0)
+    if now < ban_until:
+        wait = int(ban_until - now)
+        minutes = wait // 60
+        seconds = wait % 60
+        if minutes > 0:
+            time_str = f"{minutes} мин. {seconds} сек."
+        else:
+            time_str = f"{seconds} сек."
+        return (
+            f'<tg-emoji emoji-id="{EMOJI_PROMO}">🎟</tg-emoji> <b>Слишком много попыток!</b>\n\n'
+            f'<blockquote>Попробуйте через <b>{time_str}</b></blockquote>'
+        )
+
+    # Обновляем окно попыток — оставляем только те что в пределах PROMO_WINDOW
+    attempts = _promo_attempts.get(uid, [])
+    attempts = [ts for ts in attempts if now - ts < PROMO_WINDOW]
+
+    if len(attempts) >= PROMO_MAX_ATTEMPTS:
+        # Превышен лимит — баним
+        _promo_banned[uid]   = now + PROMO_BAN_TIME
+        _promo_attempts[uid] = []
+        minutes = PROMO_BAN_TIME // 60
+        return (
+            f'<tg-emoji emoji-id="{EMOJI_PROMO}">🎟</tg-emoji> <b>Слишком много попыток!</b>\n\n'
+            f'<blockquote>Вы ввели слишком много неверных промокодов.\n'
+            f'Попробуйте через <b>{minutes} мин.</b></blockquote>'
+        )
+
+    # Фиксируем попытку
+    attempts.append(now)
+    _promo_attempts[uid] = attempts
+    return None
 
 
 # ─────────────────────────────────────────
@@ -347,12 +442,20 @@ DEV_SECTIONS = {
 
 
 # ─────────────────────────────────────────
-#  Хэлпер: активация промокода
+#  Хэлпер: активация промокода (с rate limit)
 # ─────────────────────────────────────────
 async def _activate_promo(uid: int, code: str) -> str:
+    # Проверяем rate limit ДО обращения к БД
+    rate_error = _check_promo_rate_limit(uid)
+    if rate_error:
+        return rate_error
+
     result = db_use_promo(uid, code)
 
     if result["ok"]:
+        # Успешная активация — сбрасываем счётчик попыток
+        _promo_attempts.pop(uid, None)
+        _promo_banned.pop(uid, None)
         reward = result["reward"]
         return (
             f'<tg-emoji emoji-id="{EMOJI_PROMO}">🎟</tg-emoji> <b>Промокод активирован!</b>\n\n'
@@ -368,6 +471,8 @@ async def _activate_promo(uid: int, code: str) -> str:
         elif reason == "expired":
             detail = "Промокод уже использован максимальное количество раз."
         elif reason == "already_used":
+            # Уже активированный — не считаем за попытку брутфорса
+            _promo_attempts[uid].pop() if _promo_attempts.get(uid) else None
             detail = "Вы уже активировали этот промокод."
         else:
             detail = "Неизвестная ошибка."
@@ -583,7 +688,6 @@ async def _handle_transfer(message: Message, amount_str: str):
     sender = message.from_user
     uid    = sender.id
 
-    # Нужен reply на чьё-то сообщение
     if not message.reply_to_message:
         await message.reply(
             f'<tg-emoji emoji-id="5334544901428229844">⚡</tg-emoji> <b>Как сделать перевод?</b>\n\n'
@@ -594,20 +698,17 @@ async def _handle_transfer(message: Message, amount_str: str):
 
     target_user = message.reply_to_message.from_user
 
-    # Нельзя себе и ботам
     if target_user.id == uid:
         return
     if target_user.is_bot:
         return
 
-    # Парсим сумму
     amount_str = amount_str.strip().replace(",", ".")
     try:
         amount = float(amount_str)
     except ValueError:
         return
 
-    # Проверка лимитов суммы
     if amount < TRANSFER_MIN:
         await message.reply(
             f'<tg-emoji emoji-id="5287231198098117669">⚡</tg-emoji> '
@@ -638,12 +739,11 @@ async def _handle_transfer(message: Message, amount_str: str):
     db_get_or_create_user(sender)
     db_get_or_create_user(target_user)
 
-    # Атомарное списание — если денег не хватает, игнорируем
     success = db_try_spend_px(uid, amount)
     if not success:
-        return
+        return  # недостаточно средств — тихо игнорируем
 
-    # Обновляем кулдаун только после успешного перевода
+    # Обновляем кулдаун только после успешного списания
     _transfer_cooldowns[uid] = now
 
     db_add_px(target_user.id, amount)
@@ -750,7 +850,6 @@ _BALANCE_WORDS = {
 async def cmd_balance_text(message: Message):
     text = (message.text or "").strip()
 
-    # Только одно слово — никаких пробелов
     if " " in text or "\n" in text:
         return
 
@@ -786,6 +885,7 @@ async def main():
     init_db()
     inject_to_modules(bot)
     asyncio.create_task(mine_watchdog())
+    asyncio.create_task(_cleanup_task())   # фоновая очистка словарей
     print("✅ Бот запущен!")
     await dp.start_polling(bot)
 
