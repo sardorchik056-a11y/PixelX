@@ -833,6 +833,135 @@ async def cmd_addpromo(message: Message):
 
 
 # ─────────────────────────────────────────
+#  /add — команда админа: выдача Px
+#  Форматы:
+#    /add @username 1000
+#    /add 123456789 1000
+# ─────────────────────────────────────────
+def _db_find_user_by_username(username: str) -> dict | None:
+    """Найти пользователя по username (без @, регистр не важен)."""
+    from database import get_conn
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT * FROM users WHERE LOWER(username) = LOWER(?)",
+            (username.lstrip('@'),)
+        ).fetchone()
+    if not row:
+        return None
+    from database import _row_to_user
+    return _row_to_user(dict(row))
+
+
+def _db_find_user_by_id(uid: int) -> dict | None:
+    """Найти пользователя по числовому ID."""
+    return db_get_user(uid)
+
+
+@dp.message(Command("add"))
+async def cmd_add_px(message: Message):
+    admin_uid = message.from_user.id
+
+    if admin_uid not in ADMIN_IDS:
+        await message.answer("🚫 У вас нет доступа к этой команде!")
+        return
+
+    args = (message.text or "").split(maxsplit=2)[1:]  # убираем /add
+
+    if len(args) != 2:
+        await message.answer(
+            f'<tg-emoji emoji-id="{EMOJI_GOLD}">⚡</tg-emoji> <b>Неверный формат.</b>\n\n'
+            f'<blockquote>Использование:\n'
+            f'<code>/add @username 1000</code>\n'
+            f'<code>/add 123456789 1000</code>\n\n'
+            f'Сумма может быть отрицательной для списания.'
+            f'</blockquote>'
+        )
+        return
+
+    target_raw, amount_raw = args
+
+    # Парсим сумму
+    try:
+        amount = float(amount_raw.replace(',', '.'))
+    except ValueError:
+        await message.answer("❌ Неверная сумма!")
+        return
+
+    if amount == 0:
+        await message.answer("❌ Сумма не может быть нулём!")
+        return
+
+    # Ищем пользователя
+    target_raw = target_raw.strip()
+    if target_raw.lstrip('-').isdigit():
+        target = _db_find_user_by_id(int(target_raw))
+        lookup = f'ID <code>{target_raw}</code>'
+    else:
+        uname  = target_raw.lstrip('@')
+        target = _db_find_user_by_username(uname)
+        lookup = f'@{uname}'
+
+    if not target:
+        await message.answer(
+            f'<tg-emoji emoji-id="{EMOJI_GOLD}">⚡</tg-emoji> '
+            f'<b>Пользователь не найден:</b> {lookup}\n\n'
+            f'<blockquote>Убедитесь что пользователь хотя бы раз запускал бота.</blockquote>'
+        )
+        return
+
+    target_uid = target['id']
+
+    # Начисляем или списываем
+    if amount > 0:
+        db_add_px(target_uid, amount)
+        action = 'начислено'
+        sign   = '+'
+    else:
+        # Отрицательная сумма — списание (без ухода в минус)
+        abs_amount = abs(amount)
+        success    = db_try_spend_px(target_uid, abs_amount)
+        if not success:
+            current_px = db_get_px(target_uid)
+            await message.answer(
+                f'<tg-emoji emoji-id="{EMOJI_GOLD}">⚡</tg-emoji> '
+                f'<b>Недостаточно Px для списания!</b>\n\n'
+                f'<blockquote>Баланс пользователя: <b>{current_px:,.2f} Px</b>\n'
+                f'Запрошено к списанию: <b>{abs_amount:,.2f} Px</b></blockquote>'
+            )
+            return
+        amount = abs_amount
+        action = 'списано'
+        sign   = '-'
+
+    new_balance = db_get_px(target_uid)
+    display_name = f"@{target['username']}" if target['username'] else target['first_name']
+
+    await message.answer(
+        f'<tg-emoji emoji-id="{EMOJI_GOLD}">⚡</tg-emoji> <b>Готово!</b>\n\n'
+        f'<blockquote>'
+        f'👤  Пользователь: <b>{display_name}</b>\n'
+        f'🆔  ID: <code>{target_uid}</code>\n'
+        f'<tg-emoji emoji-id="{EMOJI_GOLD}">⚡</tg-emoji>  {action.capitalize()}: <b>{sign}{amount:,.2f} Px</b>\n'
+        f'💰  Новый баланс: <b>{new_balance:,.2f} Px</b>'
+        f'</blockquote>'
+    )
+
+    # Уведомление пользователю
+    notif_text = (
+        f'<tg-emoji emoji-id="{EMOJI_GOLD}">⚡</tg-emoji> '
+        f'<b>Изменение баланса</b>\n\n'
+        f'<blockquote>'
+        f'{"📥" if sign == "+" else "📤"}  {action.capitalize()}: <b>{sign}{amount:,.2f} Px</b>\n'
+        f'💰  Ваш баланс: <b>{new_balance:,.2f} Px</b>'
+        f'</blockquote>'
+    )
+    try:
+        await bot.send_message(target_uid, notif_text)
+    except Exception:
+        pass  # пользователь мог заблокировать бота
+
+
+# ─────────────────────────────────────────
 #  Баланс — low_priority_router
 # ─────────────────────────────────────────
 _BALANCE_WORDS = {
