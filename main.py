@@ -35,6 +35,7 @@ from database import (
     db_get_px,
     db_add_px,
     db_spend_px,
+    db_try_spend_px,
     db_register_referral,
     db_try_reward_referral,
     db_is_already_referred,
@@ -331,13 +332,9 @@ DEV_SECTIONS = {
 
 
 # ─────────────────────────────────────────
-#  Хэлпер: активация промокода (общая логика)
+#  Хэлпер: активация промокода
 # ─────────────────────────────────────────
 async def _activate_promo(uid: int, code: str) -> str:
-    """
-    Активирует промокод для пользователя и возвращает готовый HTML-текст ответа.
-    Используется как из чата (текстовые команды), так и из FSM кнопки.
-    """
     result = db_use_promo(uid, code)
 
     if result["ok"]:
@@ -529,12 +526,8 @@ async def handle_promo_input(message: Message, state: FSMContext):
 
 
 # ─────────────────────────────────────────
-#  Промокоды — команды для чата (все юзеры)
-#  Работает: /promo КОД  |  promo КОД  |  промо КОД
-#  (со слешем и без, на англ и рус, в любом регистре)
+#  Промокоды — команды для чата
 # ─────────────────────────────────────────
-
-# Слеш-команда: /promo КОД
 @dp.message(Command("promo"))
 async def cmd_promo_slash(message: Message, command: CommandObject):
     uid  = message.from_user.id
@@ -552,12 +545,9 @@ async def cmd_promo_slash(message: Message, command: CommandObject):
     await message.reply(text)
 
 
-# Текстовые варианты без слеша: "promo КОД" и "промо КОД" (любой регистр)
-# Срабатывает только если сообщение начинается с одного из этих слов
 @dp.message(F.text.regexp(r"(?i)^(promo|промо)\s+\S+"))
 async def cmd_promo_text(message: Message):
-    uid  = message.from_user.id
-    # Берём всё после первого слова
+    uid   = message.from_user.id
     parts = message.text.split(maxsplit=1)
     code  = parts[1].strip() if len(parts) > 1 else ""
 
@@ -567,6 +557,127 @@ async def cmd_promo_text(message: Message):
     db_get_or_create_user(message.from_user)
     text = await _activate_promo(uid, code)
     await message.reply(text)
+
+
+# ─────────────────────────────────────────
+#  Перевод Px — /pay /gift /дать
+#  Использование: в ответ на сообщение + сумма
+#  Пример: /gift 500  (ответом на сообщение получателя)
+#  Игнорируется если денег не хватает
+# ─────────────────────────────────────────
+async def _handle_transfer(message: Message, amount_str: str):
+    """Общая логика перевода для /pay, /gift, /дать."""
+    sender = message.from_user
+    uid    = sender.id
+
+    # Команда должна быть ответом на чьё-то сообщение
+    if not message.reply_to_message:
+        await message.reply(
+            f'<tg-emoji emoji-id="{EMOJI_GOLD}">⚡</tg-emoji> <b>Как сделать перевод?</b>\n\n'
+            f'<blockquote>Ответьте на сообщение получателя и напишите:\n'
+            f'<code>/gift 500</code></blockquote>'
+        )
+        return
+
+    target_user = message.reply_to_message.from_user
+
+    # Нельзя переводить самому себе
+    if target_user.id == uid:
+        return
+
+    # Нельзя переводить ботам
+    if target_user.is_bot:
+        return
+
+    # Парсим сумму
+    amount_str = amount_str.strip().replace(",", ".")
+    try:
+        amount = float(amount_str)
+    except ValueError:
+        return  # невалидная сумма — игнорируем
+
+    if amount <= 0:
+        return
+
+    # Убеждаемся что оба зарегистрированы
+    db_get_or_create_user(sender)
+    db_get_or_create_user(target_user)
+
+    # Атомарное списание — если денег нет, просто игнорируем
+    success = db_try_spend_px(uid, amount)
+    if not success:
+        return  # недостаточно средств — тихо игнорируем
+
+    # Зачисляем получателю
+    db_add_px(target_user.id, amount)
+
+    sender_name = f"<a href='tg://user?id={uid}'>{sender.first_name}</a>"
+    target_name = f"<a href='tg://user?id={target_user.id}'>{target_user.first_name}</a>"
+
+    await message.reply(
+        f'<tg-emoji emoji-id="{EMOJI_GOLD}">⚡</tg-emoji> <b>Перевод выполнен!</b>\n\n'
+        f'<blockquote>'
+        f'👤  Отправитель: {sender_name}\n'
+        f'🎯  Получатель: {target_name}\n'
+        f'<tg-emoji emoji-id="5429651785352501917">⚡</tg-emoji>  Сумма: <b>{amount:,.2f} Px</b>'
+        f'</blockquote>'
+    )
+
+
+@dp.message(Command("pay"))
+async def cmd_pay(message: Message, command: CommandObject):
+    await _handle_transfer(message, command.args or "")
+
+
+@dp.message(Command("gift"))
+async def cmd_gift(message: Message, command: CommandObject):
+    await _handle_transfer(message, command.args or "")
+
+
+@dp.message(Command("дать"))
+async def cmd_dat(message: Message, command: CommandObject):
+    await _handle_transfer(message, command.args or "")
+
+
+# ─────────────────────────────────────────
+#  Баланс — б Б B b bal Bal balance баланс бал балик
+#  Только если сообщение состоит РОВНО из одного слова
+# ─────────────────────────────────────────
+
+# Список допустимых слов в любом регистре
+_BALANCE_WORDS = {
+    "б", "б", "b",          # одна буква
+    "bal", "balance",        # английские
+    "баланс", "бал", "балик" # русские
+}
+
+
+@dp.message(F.text)
+async def cmd_balance_text(message: Message):
+    text = (message.text or "").strip()
+
+    # Сообщение должно быть ровно одним словом — никакого пробела
+    if " " in text or "\n" in text:
+        return
+
+    if text.lower() not in _BALANCE_WORDS:
+        return
+
+    uid  = message.from_user.id
+    db_get_or_create_user(message.from_user)
+    user = db_get_user(uid)
+
+    if not user:
+        return
+
+    await message.reply(
+        f'<tg-emoji emoji-id="{EMOJI_GOLD}">⚡</tg-emoji> <b>Баланс</b>\n\n'
+        f'<blockquote>'
+        f'<tg-emoji emoji-id="{EMOJI_GOLD}">⚡</tg-emoji>  <b>Баланс:</b> <code>{user["px"]:,.2f} Px</code>\n'
+        f'<tg-emoji emoji-id="5429651785352501917">⚡</tg-emoji>  <b>Выиграно:</b> <code>{user["total_won"]:,.2f} Px</code>\n'
+        f'<tg-emoji emoji-id="5429518319243775957">⚡</tg-emoji>  <b>Проиграно:</b> <code>{user["total_lost"]:,.2f} Px</code>'
+        f'</blockquote>'
+    )
 
 
 # ─────────────────────────────────────────
