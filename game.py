@@ -154,7 +154,7 @@ set_owner_fn = lambda mid, uid: None
 # ── game_router — основной, подключается в main.py первым среди игровых ──
 game_router = Router()
 
-# ── game_low_router — только F.text для слов-команд, подключается ПОСЛЕДНИМ ──
+# ── game_low_router — пустой, оставлен для совместимости с main.py ──
 game_low_router = Router()
 
 
@@ -239,6 +239,13 @@ def is_bet_command(text: str) -> bool:
     text = text.strip().lstrip('/').lower()
     parts = text.split()
     return len(parts) >= 3 and parts[0] in COMMAND_MAPPING
+
+
+def _is_games_word(text: str) -> bool:
+    if not text:
+        return False
+    t = text.strip()
+    return ' ' not in t and '\n' not in t and t.lower() in _GAMES_WORDS
 
 
 # ─────────────────────────────────────────
@@ -413,7 +420,7 @@ def games_keyboard() -> InlineKeyboardMarkup:
 
 
 GAMES_TEXT = (
-    '<b><tg-emoji emoji-id="5424972470023104089">👋</tg-emoji> Игры</b>\n\n'
+    '<tg-emoji emoji-id="5424972470023104089">👋</tg-emoji> <b>Игры</b>\n\n'
     '<blockquote><b><tg-emoji emoji-id="5197269100878907942">👋</tg-emoji>Текстовые команды:</b>\n'
     '  <tg-emoji emoji-id="5195033767969839232">👋</tg-emoji>Эмоджи игры:\n'
     "  <code>куб (исход) (сумма)</code>\n"
@@ -446,6 +453,15 @@ async def cmd_games_slash_en(message: Message):
 
 @game_router.message(Command("игры"))
 async def cmd_games_slash_ru(message: Message):
+    await _send_games_menu(message)
+
+
+# ─────────────────────────────────────────
+#  Текстовые слова без слеша: игры / games / игра / game
+#  Перенесены в game_router чтобы не перехватывались low_priority_router
+# ─────────────────────────────────────────
+@game_router.message(lambda m: _is_games_word(m.text or ""))
+async def cmd_games_text(message: Message):
     await _send_games_menu(message)
 
 
@@ -695,21 +711,3 @@ async def msg_text_bet(message: Message):
     bet_type, amount = parsed
     name = _nickname(message.from_user)
     await _execute_bet(uid, name, amount, bet_type, message, message.chat.id)
-
-
-# ─────────────────────────────────────────
-#  Текстовые слова без слеша: игры / games / игра / game
-#  Регистрируется в game_low_router — подключается ПОСЛЕДНИМ в main.py
-# ─────────────────────────────────────────
-@game_low_router.message(F.text)
-async def cmd_games_text(message: Message):
-    text = (message.text or "").strip()
-
-    # Только одно слово — никаких пробелов
-    if " " in text or "\n" in text:
-        return
-
-    if text.lower() not in _GAMES_WORDS:
-        return
-
-    await _send_games_menu(message)
