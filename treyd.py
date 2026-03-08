@@ -340,7 +340,7 @@ def _kb_confirm_withdraw() -> InlineKeyboardMarkup:
 
 def _kb_stats() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📦 Мои лоты", callback_data="ex_my_lots_0")],
+        [InlineKeyboardButton(text="💹Мои лоты", callback_data="ex_my_lots_0")],
         [InlineKeyboardButton(
             text="Назад", callback_data="exchange", icon_custom_emoji_id=EMOJI_BACK
         )],
