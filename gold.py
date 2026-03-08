@@ -133,7 +133,6 @@ async def _inactivity_watcher(user_id: int, bot: Bot):
                     "<blockquote><b>⏰ Игра закрыта!</b></blockquote>"
                 ),
                 parse_mode=ParseMode.HTML,
-                ]])
             )
         except Exception:
             pass
