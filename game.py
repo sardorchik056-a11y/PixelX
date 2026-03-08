@@ -687,7 +687,7 @@ async def msg_text_bet(message: Message):
     parsed = _parse_bet_command(message.text)
     if parsed is None:
         await message.answer(
-            "<blockquote>❌<b>Неверный формат!</b>",
+            "<blockquote>❌<b>Неверный формат!</b></blockquote>",
             parse_mode='HTML'
         )
         return
