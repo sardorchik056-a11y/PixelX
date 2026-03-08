@@ -572,9 +572,9 @@ async def _handle_transfer(message: Message, amount_str: str):
 
     if not message.reply_to_message:
         await message.reply(
-            f'<tg-emoji emoji-id="{EMOJI_GOLD}">⚡</tg-emoji> <b>Как сделать перевод?</b>\n\n'
+            f'<tg-emoji emoji-id="5334544901428229844">⚡</tg-emoji> <b>Как сделать перевод?</b>\n\n'
             f'<blockquote>Ответьте на сообщение получателя и напишите:\n'
-            f'<code>/gift 500</code></blockquote>'
+            f'<code>/gift, /pay, /дать (сумма)</code></blockquote>'
         )
         return
 
@@ -607,11 +607,11 @@ async def _handle_transfer(message: Message, amount_str: str):
     target_name = f"<a href='tg://user?id={target_user.id}'>{target_user.first_name}</a>"
 
     await message.reply(
-        f'<tg-emoji emoji-id="{EMOJI_GOLD}">⚡</tg-emoji> <b>Перевод выполнен!</b>\n\n'
+        f'<tg-emoji emoji-id="5206607081334906820">⚡</tg-emoji> <b>Перевод выполнен!</b>\n\n'
         f'<blockquote>'
-        f'👤  Отправитель: {sender_name}\n'
-        f'🎯  Получатель: {target_name}\n'
-        f'<tg-emoji emoji-id="5429651785352501917">⚡</tg-emoji>  Сумма: <b>{amount:,.2f} Px</b>'
+        f'<tg-emoji emoji-id="5195033767969839232">⚡</tg-emoji>  Отправитель: {sender_name}\n'
+        f'<tg-emoji emoji-id="5197288647275071607">⚡</tg-emoji>  Получатель: {target_name}\n'
+        f'<tg-emoji emoji-id="5287231198098117669">⚡</tg-emoji>  Сумма: <b>{amount:,.2f} Px</b>'
         f'</blockquote>'
     )
 
@@ -639,7 +639,7 @@ async def cmd_addpromo(message: Message):
     uid = message.from_user.id
 
     if uid not in ADMIN_IDS:
-        await message.answer("🚫 У вас нет доступа к этой команде.")
+        await message.answer("🚫 У вас нет доступа к этой команде!")
         return
 
     args = message.text.split(maxsplit=3)[1:]
@@ -721,11 +721,10 @@ async def cmd_balance_text(message: Message):
         return
 
     await message.reply(
-        f'<tg-emoji emoji-id="{EMOJI_GOLD}">⚡</tg-emoji> <b>Баланс</b>\n\n'
+        f'<tg-emoji emoji-id="{EMOJI_GOLD}">⚡</tg-emoji><b>Баланс:</b> <code>{user["px"]:,.2f} Px</code>\n\n'
         f'<blockquote>'
-        f'<tg-emoji emoji-id="{EMOJI_GOLD}">⚡</tg-emoji>  <b>Баланс:</b> <code>{user["px"]:,.2f} Px</code>\n'
-        f'<tg-emoji emoji-id="5429651785352501917">⚡</tg-emoji>  <b>Выиграно:</b> <code>{user["total_won"]:,.2f} Px</code>\n'
-        f'<tg-emoji emoji-id="5429518319243775957">⚡</tg-emoji>  <b>Проиграно:</b> <code>{user["total_lost"]:,.2f} Px</code>'
+        f'<tg-emoji emoji-id="5429651785352501917">⚡</tg-emoji>  <b>Выиграно всего:</b> <code>{user["total_won"]:,.2f} Px</code>\n'
+        f'<tg-emoji emoji-id="5429518319243775957">⚡</tg-emoji>  <b>Проиграно всего:</b> <code>{user["total_lost"]:,.2f} Px</code>'
         f'</blockquote>'
     )
 
