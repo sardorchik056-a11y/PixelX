@@ -135,15 +135,9 @@ async def _inactivity_watcher(user_id: int, bot: Bot):
             await bot.edit_message_text(
                 chat_id=chat_id, message_id=msg_id,
                 text=(
-                    "<blockquote><b>⏰ Игра закрыта</b></blockquote>\n\n"
-                    f"<blockquote>💣 Мины\n"
-                    f"Ставка <code>{bet}</code> Px возвращена\n</blockquote>\n\n"
-                    "<blockquote><i>Игра завершена по таймауту (5 минут).</i></blockquote>"
+                    "<blockquote><b>⏰ Игра закрыта!</b></blockquote>"
                 ),
                 parse_mode="HTML",
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
-                    InlineKeyboardButton(text="💣 Играть снова", callback_data="mines_menu")
-                ]])
             )
         except Exception:
             pass
@@ -177,13 +171,7 @@ def _active_game_error_text(session: dict) -> str:
     gems  = session.get('gems_opened', 0)
     mult  = get_multiplier(mines, gems)
     return (
-        f"<blockquote><b>⚠️ У вас уже есть активная игра!</b></blockquote>\n\n"
-        f"<blockquote>"
-        f"💣 Мин: <b>{mines}</b>\n"
-        f"Ставка: <code>{bet}</code> Px\n"
-        f"💎 Открыто: <b>{gems}</b> | <b>x{mult}</b>\n"
-        f"</blockquote>\n\n"
-        f"<blockquote><i>Завершите текущую игру.</i></blockquote>"
+        f"<blockquote><b>⚠️ У вас уже есть активная игра!</b></blockquote>"
     )
 
 
@@ -286,10 +274,10 @@ def game_text(session: dict) -> str:
         f"<blockquote><b>💣 Мины</b></blockquote>\n\n"
         f"<blockquote>"
         f"Ставка: <code>{bet}</code> Px\n"
-        f"💣 Мин: <b>{mines}</b> | 💎 Безопасных: <b>{total_safe}</b>\n"
-        f"Открыто: <b>{gems}</b>\n"
-        f"Текущий: <b><code>x{mult}</code></b>\n"
-        f"Следующий: <b><code>x{next_mult}</code></b>\n"
+        f"💣 Мин: <b>{mines}</b> | 💎: <b>{total_safe}</b>\n"
+        f'<tg-emoji emoji-id="5427168083074628963">👋</tg-emoji>Открыто: <b>{gems}</b>\n'
+        f'<tg-emoji emoji-id="5397782960512444700">👋</tg-emoji>Текущий: <b><code>x{mult}</code></b>\n'
+        f'<tg-emoji emoji-id="5416117059207572332">👋</tg-emoji>Следующий: <b><code>x{next_mult}</code></b>\n'
         f"</blockquote>\n\n"
         f"<blockquote><b><i>Выберите безопасную ячейку!</i></b></blockquote>"
     )
@@ -304,8 +292,7 @@ async def show_mines_menu(callback: CallbackQuery):
     balance = db_get_px(user_id)
     await callback.message.edit_text(
         f"<blockquote><b>💣 Мины</b></blockquote>\n\n"
-        f"<blockquote><b>Баланс: <code>{balance:.2f}</code> Px</b></blockquote>\n\n"
-        f"<blockquote><b>Выберите количество мин:</b></blockquote>",
+        f"<blockquote><b>Выберите количество мин ниже:</b></blockquote>",
         parse_mode=ParseMode.HTML,
         reply_markup=build_mines_select_keyboard()
     )
@@ -336,9 +323,7 @@ async def mines_select_handler(callback: CallbackQuery, state: FSMContext):
 
     balance = db_get_px(user_id)
     await callback.message.edit_text(
-        f"<blockquote><b>✏️ Введите сумму ставки:</b>\n"
-        f"Баланс: <code>{balance:.2f}</code> Px\n"
-        f"Мин: <code>{MIN_BET}</code> | Макс: <code>{int(MAX_BET):,}</code></blockquote>",
+        f'<blockquote><b><tg-emoji emoji-id="5197269100878907942">👋</tg-emoji> Введите сумму ставки:</b></blockquote>',
         parse_mode=ParseMode.HTML,
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
             InlineKeyboardButton(text="Назад", callback_data="mines_back_select",
@@ -368,7 +353,7 @@ async def mines_manual_handler(callback: CallbackQuery, state: FSMContext):
     await state.update_data(mines_count=None, waiting_manual=True)
     await state.set_state(MinesGame.choosing_bet)
     await callback.message.edit_text(
-        "<blockquote><b>✏️ Введите количество мин (от 2 до 24):</b></blockquote>",
+        "<blockquote><b><tg-emoji emoji-id="5197269100878907942">👋</tg-emoji> Введите количество мин (от 2 до 24):</b></blockquote>",
         parse_mode=ParseMode.HTML,
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
             InlineKeyboardButton(text="Назад", callback_data="mines_back_select",
@@ -480,8 +465,8 @@ async def mines_cell_handler(callback: CallbackQuery, state: FSMContext):
             await callback.message.edit_text(
                 f"<blockquote><b>💥 Вы попали на мину!</b></blockquote>\n\n"
                 f"<blockquote>"
-                f"Потеряно: <code>{bet}</code> Px\n"
-                f"Баланс: <code>{balance:.2f}</code> Px"
+                f'<tg-emoji emoji-id="5429518319243775957">👋</tg-emoji>Потеряно: <code>{bet}</code> Px\n'
+                f'<tg-emoji emoji-id="5278467510604160626">👋</tg-emoji>Баланс: <code>{balance:.2f}</code> Px'
                 f"</blockquote>\n\n"
                 f"<blockquote><b><i>Это не повод сдаваться!</i></b></blockquote>",
                 parse_mode=ParseMode.HTML,
@@ -516,23 +501,23 @@ async def mines_cell_handler(callback: CallbackQuery, state: FSMContext):
 
                 balance = db_get_px(user_id)
                 await callback.message.edit_text(
-                    f"<blockquote><b>🏆 Все алмазы найдены!</b></blockquote>\n\n"
+                    f'<blockquote><b><tg-emoji emoji-id="5461151367559141950">👋</tg-emoji> Все алмазы найдены!</b></blockquote>\n\n'
                     f"<blockquote>"
-                    f"Множитель: <b>x{mult}</b>\n"
-                    f"Выигрыш: <code>{winnings}</code> Px\n"
-                    f"Баланс: <code>{balance:.2f}</code> Px"
+                    f'<tg-emoji emoji-id="5201691993775818138">👋</tg-emoji>Множитель: <b>x{mult}</b>\n'
+                    f'<tg-emoji emoji-id="5429651785352501917">👋</tg-emoji>Выигрыш: <code>{winnings}</code> Px\n'
+                    f'<tg-emoji emoji-id="5278467510604160626">👋</tg-emoji>Баланс: <code>{balance:.2f}</code> Px'
                     f"</blockquote>",
                     parse_mode=ParseMode.HTML,
                     reply_markup=build_game_keyboard(session, game_over=True)
                 )
                 set_owner_fn(msg_id, user_id)
-                await callback.answer("🏆 Победа!")
+                await callback.answer("Победа!")
             else:
                 await callback.message.edit_text(
                     game_text(session), parse_mode=ParseMode.HTML,
                     reply_markup=build_game_keyboard(session)
                 )
-                await callback.answer(f"💎 x{mult}")
+                await callback.answer(f" x{mult}")
 
     finally:
         s = _sessions.get(user_id)
@@ -579,11 +564,11 @@ async def mines_cashout(callback: CallbackQuery, state: FSMContext):
 
     balance = db_get_px(user_id)
     await callback.message.edit_text(
-        f"<blockquote><b>💰 Кэшаут!</b></blockquote>\n\n"
+        f'<blockquote><b><tg-emoji emoji-id="5305699699204837855">👋</tg-emoji> Кэшаут!</b></blockquote>\n\n'
         f"<blockquote>"
-        f"Множитель: <b>x{mult}</b>\n"
-        f"Выигрыш: <code>{winnings}</code> Px\n"
-        f"Баланс: <code>{balance:.2f}</code> Px"
+        f'<tg-emoji emoji-id="5201691993775818138">👋</tg-emoji>Множитель: <b>x{mult}</b>\n'
+        f'<tg-emoji emoji-id="5429651785352501917">👋</tg-emoji>Выигрыш: <code>{winnings}</code> Px\n'
+        f'<tg-emoji emoji-id="5278467510604160626">👋</tg-emoji>Баланс: <code>{balance:.2f}</code> Px'
         f"</blockquote>",
         parse_mode=ParseMode.HTML,
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
@@ -595,7 +580,7 @@ async def mines_cashout(callback: CallbackQuery, state: FSMContext):
     )
     set_owner_fn(msg_id, user_id)
     _game_board_owner[msg_id] = user_id
-    await callback.answer(f"💰 +{winnings}!")
+    await callback.answer(f" +{winnings}!")
 
 
 @mines_router.callback_query(F.data == "mines_cashout_again")
@@ -632,14 +617,13 @@ async def process_mines_bet(message: Message, state: FSMContext):
         try:
             m = int(message.text.strip())
         except ValueError:
-            await message.answer("❌ Введите целое число от 2 до 24."); return
+            await message.answer("❌ Введите целое число от 2 до 24!"); return
         if m < 2 or m > 24:
-            await message.answer("❌ Число мин должно быть от 2 до 24."); return
+            await message.answer("❌ Число мин должно быть от 2 до 24!"); return
         await state.update_data(mines_count=m, waiting_manual=False)
         balance = db_get_px(user_id)
         await message.answer(
-            f"<blockquote><b>✏️ Введите сумму ставки:</b>\n"
-            f"Баланс: <code>{balance:.2f}</code> Px</blockquote>",
+            f'<blockquote><b><tg-emoji emoji-id="5197269100878907942">👋</tg-emoji> Введите сумму ставки:</b></blockquote>',
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
                 InlineKeyboardButton(text="Назад", callback_data="mines_back_select",
@@ -666,13 +650,13 @@ async def process_mines_bet(message: Message, state: FSMContext):
         try:
             bet = float(message.text.replace(',', '.'))
         except ValueError:
-            await message.answer("❌ Введите корректную сумму."); return
+            await message.answer("❌ Введите корректную сумму!"); return
 
         if bet < MIN_BET:
-            await message.answer(f"❌ Минимальная ставка: <code>{MIN_BET}</code> Px",
+            await message.answer(f"❌ Минимальная ставка: <code>{MIN_BET}</code>Px",
                                  parse_mode="HTML"); return
         if bet > MAX_BET:
-            await message.answer(f"❌ Максимальная ставка: <code>{int(MAX_BET):,}</code> Px",
+            await message.answer(f"❌ Максимальная ставка: <code>{int(MAX_BET):,}</code>Px",
                                  parse_mode="HTML"); return
 
         if not db_try_spend_px(user_id, bet):
