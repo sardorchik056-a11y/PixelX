@@ -204,10 +204,10 @@ def game_text(session: dict) -> str:
     return (
         f'<blockquote><b>💰 Золото</b></blockquote>\n\n'
         f"<blockquote>"
-        f"Ставка: <code>{bet}</code> Px\n"
-        f"Уровень: <b>{floor_num}/{FLOORS}</b>\n"
-        f"Текущий: <b><code>x{mult}</code></b>\n"
-        f"Следующий: <b><code>x{next_mult}</code></b>\n"
+        f'<tg-emoji emoji-id="5427168083074628963">👋</tg-emoji>Ставка: <code>{bet}Px</code>\n'
+        f'<tg-emoji emoji-id="5391032818111363540">👋</tg-emoji>Уровень: <b>{floor_num}/{FLOORS}</b>\n'
+        f'<tg-emoji emoji-id="5397782960512444700">👋</tg-emoji>Текущий: <b><code>x{mult}</code></b>\n'
+        f'<tg-emoji emoji-id="5416117059207572332">👋</tg-emoji>Следующий: <b><code>x{next_mult}</code></b>\n'
         f"</blockquote>\n\n"
         f"<blockquote><b><i>Выберите ячейку — за одной спрятано золото!</i></b></blockquote>"
     )
@@ -279,14 +279,12 @@ def build_gold_keyboard(session: dict, game_over: bool = False) -> InlineKeyboar
 async def show_gold_menu(callback: CallbackQuery, state: FSMContext = None):
     user_id = callback.from_user.id
     if _has_active_game(user_id):
-        await callback.answer("⚠️ Завершите текущую игру!", show_alert=True); return
+        await callback.answer("⚠️Завершите текущую игру!", show_alert=True); return
 
     balance = db_get_px(user_id)
     await callback.message.edit_text(
-        f'<blockquote><b>⛏ Золото</b></blockquote>\n\n'
-        f"<blockquote><b>Баланс: <code>{balance:.2f}</code> Px</b></blockquote>\n\n"
-        f"<blockquote><b>✏️ Введите сумму ставки:</b>\n"
-        f"Мин: <code>{MIN_BET}</code> | Макс: <code>{int(MAX_BET):,}</code></blockquote>",
+        f'<blockquote><b>💰 Золото</b></blockquote>\n\n'
+        f'<blockquote><b><tg-emoji emoji-id="5197269100878907942">👋</tg-emoji> Введите сумму ставки:</b></blockquote>',
         parse_mode=ParseMode.HTML,
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
             InlineKeyboardButton(text="Назад", callback_data="games", icon_custom_emoji_id=EMOJI_BACK)
@@ -423,8 +421,8 @@ async def gold_cell_handler(callback: CallbackQuery, state: FSMContext):
             await callback.message.edit_text(
                 f"<blockquote><b>💥 Вы нашли бомбу!</b></blockquote>\n\n"
                 f"<blockquote>"
-                f"Потеряно: <code>{bet}</code> Px\n"
-                f"Баланс: <code>{balance:.2f}</code> Px"
+                f'<tg-emoji emoji-id="5429518319243775957">👋</tg-emoji>Потеряно: <code>{bet}</code> Px\n'
+                f'<tg-emoji emoji-id="5278467510604160626">👋</tg-emoji>Баланс: <code>{balance:.2f}</code> Px'
                 f"</blockquote>\n\n"
                 f"<blockquote><b><i>Шахта обвалилась! Попробуйте снова!</i></b></blockquote>",
                 parse_mode=ParseMode.HTML,
@@ -458,11 +456,11 @@ async def gold_cell_handler(callback: CallbackQuery, state: FSMContext):
 
                 balance = db_get_px(user_id)
                 await callback.message.edit_text(
-                    f"<blockquote><b>🏆 Вы добыли всё золото!</b></blockquote>\n\n"
+                    f'<blockquote><b><tg-emoji emoji-id="5461151367559141950">👋</tg-emoji> Вы добыли всё золото!</b></blockquote>\n\n'
                     f"<blockquote>"
-                    f"Множитель: <b>x{mult}</b>\n"
-                    f"Выигрыш: <code>{winnings}</code> Px\n"
-                    f"Баланс: <code>{balance:.2f}</code> Px"
+                    f'<tg-emoji emoji-id="5201691993775818138">👋</tg-emoji>Множитель: <b>x{mult}</b>\n'
+                    f'<tg-emoji emoji-id="5312441427764989435">👋</tg-emoji>Выигрыш: <code>{winnings}</code> Px\n'
+                    f'<tg-emoji emoji-id="5278467510604160626">👋</tg-emoji>Баланс: <code>{balance:.2f}</code> Px'
                     f"</blockquote>",
                     parse_mode=ParseMode.HTML,
                     reply_markup=InlineKeyboardMarkup(inline_keyboard=[
@@ -474,13 +472,13 @@ async def gold_cell_handler(callback: CallbackQuery, state: FSMContext):
                 )
                 set_owner_fn(msg_id, user_id)
                 _game_board_owner[msg_id] = user_id
-                await callback.answer("🏆 Победа!")
+                await callback.answer("Победа!")
             else:
                 await callback.message.edit_text(
                     game_text(session), parse_mode=ParseMode.HTML,
                     reply_markup=build_gold_keyboard(session)
                 )
-                await callback.answer(f"💰 x{mult}")
+                await callback.answer(f"x{mult}")
 
     finally:
         s = _sessions.get(user_id)
@@ -526,11 +524,11 @@ async def gold_cashout(callback: CallbackQuery, state: FSMContext):
 
     balance = db_get_px(user_id)
     await callback.message.edit_text(
-        f"<blockquote><b>💰 Кэшаут!</b></blockquote>\n\n"
+        f'<blockquote><b><tg-emoji emoji-id="5461151367559141950">👋</tg-emoji> Кэшаут!</b></blockquote>\n\n'
         f"<blockquote>"
-        f"Множитель: <b>x{mult}</b>\n"
-        f"Выигрыш: <code>{winnings}</code> Px\n"
-        f"Баланс: <code>{balance:.2f}</code> Px"
+        f'<tg-emoji emoji-id="5201691993775818138">👋</tg-emoji>Множитель: <b>x{mult}</b>\n'
+        f'<tg-emoji emoji-id="5312441427764989435">👋</tg-emoji>Выигрыш: <code>{winnings}</code> Px\n'
+        f'<tg-emoji emoji-id="5278467510604160626">👋</tg-emoji>Баланс: <code>{balance:.2f}</code> Px'
         f"</blockquote>",
         parse_mode=ParseMode.HTML,
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
@@ -542,7 +540,7 @@ async def gold_cashout(callback: CallbackQuery, state: FSMContext):
     )
     set_owner_fn(msg_id, user_id)
     _game_board_owner[msg_id] = user_id
-    await callback.answer(f"💰 +{winnings}!")
+    await callback.answer(f" +{winnings}!")
 
 
 @gold_router.callback_query(F.data == "gold_cashout_again")
@@ -588,7 +586,7 @@ async def process_gold_bet(message: Message, state: FSMContext):
             bet = float(message.text.replace(',', '.'))
         except ValueError:
             await message.answer(
-                f'<blockquote>❌ Введите корректную сумму.</blockquote>', parse_mode=ParseMode.HTML
+                f'<blockquote>❌Введите корректную сумму!</blockquote>', parse_mode=ParseMode.HTML
             ); return
 
         err = _validate_bet(bet)
@@ -599,7 +597,7 @@ async def process_gold_bet(message: Message, state: FSMContext):
         if not db_try_spend_px(user_id, bet):
             balance = db_get_px(user_id)
             await message.answer(
-                f'<blockquote><b>❌ Недостаточно средств!</b>\n'
+                f'<blockquote><b>❌Недостаточно средств!</b>\n'
                 f'Баланс: <code>{balance:.2f}</code> Px</blockquote>',
                 parse_mode=ParseMode.HTML
             ); return
