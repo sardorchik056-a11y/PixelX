@@ -1133,24 +1133,7 @@ async def cb_withdraw_confirm(call: CallbackQuery, state: FSMContext):
     set_owner_fn(call.message.message_id, uid)
     await call.answer()
 
-    # Уведомление всем админам
-    for admin_id in ADMIN_IDS:
-        try:
-            await _bot_ref.send_message(
-                admin_id,
-                f'<tg-emoji emoji-id="{EMOJI_WITHDRAW}">🏦</tg-emoji> '
-                f'<b>Новая заявка на вывод #{req_id}</b>\n\n'
-                f'<blockquote>'
-                f'👤  @{uname} (ID: <code>{uid}</code>)\n'
-                f'💵  Сумма: <b>${amount:.2f}</b>\n'
-                f'✅  К выплате: <b>${net:.2f}</b>'
-                f'</blockquote>\n\n'
-                f'<code>/take #{req_id}</code> — одобрить\n'
-                f'<code>/reject #{req_id}</code> — отклонить',
-                parse_mode=ParseMode.HTML,
-            )
-        except Exception:
-            pass
+
 
 
 # ════════════════════════════════════════════════════════════
