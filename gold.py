@@ -130,14 +130,9 @@ async def _inactivity_watcher(user_id: int, bot: Bot):
             await bot.edit_message_text(
                 chat_id=chat_id, message_id=msg_id,
                 text=(
-                    "<blockquote><b>⏰ Игра закрыта</b></blockquote>\n\n"
-                    f"<blockquote>⛏ Золото\n"
-                    f"Ставка <code>{bet}</code> Px возвращена\n</blockquote>\n\n"
-                    "<blockquote><i>Игра завершена по таймауту (5 минут).</i></blockquote>"
+                    "<blockquote><b>⏰ Игра закрыта!</b></blockquote>"
                 ),
                 parse_mode=ParseMode.HTML,
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
-                    InlineKeyboardButton(text="⛏ Играть снова", callback_data="gold_menu")
                 ]])
             )
         except Exception:
@@ -163,22 +158,17 @@ def _active_game_error_text(session: dict) -> str:
     floors_passed = session['floors_passed']
     mult          = get_multiplier(floors_passed)
     return (
-        f"<blockquote><b>⚠️ У вас уже есть активная игра!</b></blockquote>\n\n"
-        f"<blockquote>"
-        f"Ставка: <code>{bet}</code> Px\n"
-        f"Пройдено уровней: <b>{floors_passed}/{FLOORS}</b> | <b>x{mult}</b>\n"
-        f"</blockquote>\n\n"
-        f"<blockquote><i>Завершите текущую игру.</i></blockquote>"
+        f"<blockquote><b>⚠️У вас уже есть активная игра!</b></blockquote>"
     )
 
 def _validate_bet(bet: float) -> str | None:
     import math
     if not math.isfinite(bet) or bet <= 0:
-        return "Некорректная сумма ставки."
+        return "<b>❌Некорректная сумма ставки!</b>"
     if bet < MIN_BET:
-        return f"Минимальная ставка: {MIN_BET} Px"
+        return f"<b>❌Минимальная ставка: {MIN_BET}Px</b>"
     if bet > MAX_BET:
-        return f"Максимальная ставка: {int(MAX_BET):,} Px"
+        return f"<b>❌Максимальная ставка: {int(MAX_BET):,}Px</b>"
     return None
 
 
@@ -213,14 +203,14 @@ def game_text(session: dict) -> str:
     floor_num     = session['current_floor'] + 1
 
     return (
-        f'<blockquote><b>⛏ Золото</b></blockquote>\n\n'
+        f'<blockquote><b>💰 Золото</b></blockquote>\n\n'
         f"<blockquote>"
         f"Ставка: <code>{bet}</code> Px\n"
         f"Уровень: <b>{floor_num}/{FLOORS}</b>\n"
         f"Текущий: <b><code>x{mult}</code></b>\n"
         f"Следующий: <b><code>x{next_mult}</code></b>\n"
         f"</blockquote>\n\n"
-        f"<blockquote><b><i>Выберите ячейку — за одной спрятано золото! (50/50)</i></b></blockquote>"
+        f"<blockquote><b><i>Выберите ячейку — за одной спрятано золото!</i></b></blockquote>"
     )
 
 
