@@ -396,7 +396,7 @@ def _text_main(uid: int) -> str:
         f'<b><tg-emoji emoji-id="5429651785352501917">💱</tg-emoji>Покупка $-Px <code>50000-1mlrd Px</code></b>\n'
         f'<b><tg-emoji emoji-id="5429518319243775957">💱</tg-emoji>Продажа Px-$ <code>50000-1mlrd Px</code></b>\n'
         f'</blockquote>\n\n'
-        f'<b><tg-emoji emoji-id="5197288647275071607">💱</tg-emoji> Надёжность превыше всего</b>\n'
+        f'<blockquote><b><tg-emoji emoji-id="5197288647275071607">💱</tg-emoji> Надёжность превыше всего</b></blockquote>\n\n'
         f'<b><tg-emoji emoji-id="5201691993775818138">💱</tg-emoji>Ваша безопасность — наш приоритет! Средства хранятся в защищенном резерве до завершения сделки!</b>'
     )
 
