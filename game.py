@@ -233,14 +233,14 @@ def is_bet_command(text: str) -> bool:
 #  Игровые функции
 # ─────────────────────────────────────────
 WIN_TEXT  = (
-    "<b>{name} — Вы выиграли! 🎉</b>\n\n"
-    "<blockquote><code>{winnings:.2f}</code> Px зачислены на баланс!</blockquote>\n"
-    "<blockquote>🎉 Поздравляем!</blockquote>"
+    '<b>{name} — Вы выиграли! <tg-emoji emoji-id="5461151367559141950">👋</tg-emoji></b>\n\n'
+    "<blockquote><b><code>{winnings:.2f}Px</code> зачислены на баланс!</b></blockquote>\n"
+    '<blockquote><tg-emoji emoji-id="5222079954421818267">👋</tg-emoji> Поздравляем!</blockquote>'
 )
 LOSE_TEXT = (
-    "<b>{name} — Вы проиграли ❌</b>\n\n"
+    '<b>{name} — Вы проиграли! <tg-emoji emoji-id="5447183459602669338">👋</tg-emoji></b>\n\n'
     "<blockquote><b><i>Это не повод сдаваться! Пробуй снова!</i></b></blockquote>\n"
-    "<blockquote>🍀 Желаем удачи!</blockquote>"
+    '<blockquote><tg-emoji emoji-id="5305699699204837855">👋</tg-emoji> Желаем удачи!</blockquote>'
 )
 
 
@@ -332,7 +332,7 @@ async def _play_bowling_vs(chat_id: int, uid: int, name: str, amount: float,
         reruns = 0
         while pv == bv and reruns < 5:
             reruns += 1
-            await p_roll.reply("⚖️ Ничья! Переброс...")
+            await p_roll.reply('<tg-emoji emoji-id="5312441427764989435">👋</tg-emoji> Ничья! Переброс...')
             await asyncio.sleep(1)
             p_roll = await _bot.send_dice(chat_id=chat_id, emoji="🎳")
             await asyncio.sleep(2)
@@ -393,14 +393,14 @@ async def _execute_bet(uid: int, name: str, amount: float,
     """
     cfg = _get_bet_config(bet_type)
     if cfg is None:
-        await _bot.send_message(fallback_chat_id, "❌ Неизвестный тип ставки.")
+        await _bot.send_message(fallback_chat_id, "❌Неизвестный тип ставки!")
         return
 
     # Атомарное списание
     if not db_try_spend_px(uid, amount):
         await _bot.send_message(
             fallback_chat_id,
-            "<blockquote><b>❌ Недостаточно средств!</b></blockquote>",
+            '<blockquote><b><tg-emoji emoji-id="5447183459602669338">👋</tg-emoji> Недостаточно средств!</b></blockquote>',
             parse_mode='HTML'
         )
         return
@@ -413,7 +413,7 @@ async def _execute_bet(uid: int, name: str, amount: float,
         logging.error(f"[game] Ошибка Фазы 1 (uid={uid}): {e} — возвращаем средства")
         db_add_px(uid, amount)
         try:
-            await _bot.send_message(fallback_chat_id, "❌ Ошибка соединения. Ставка возвращена.")
+            await _bot.send_message(fallback_chat_id, "❌Ошибка соединения, Ставка возвращена!")
         except Exception:
             pass
     finally:
@@ -448,15 +448,16 @@ def games_keyboard() -> InlineKeyboardMarkup:
 
 
 GAMES_TEXT = (
-    "<b>🎮 Игры</b>\n\n"
-    "<blockquote>Выберите игру и сделайте ставку.\n"
-    "Минимум: <code>10 Px</code> | Максимум: <code>100 000 000 Px</code></blockquote>\n\n"
-    "<blockquote><b>Текстовые команды:</b>\n"
-    "  <code>куб чет 100</code>\n"
-    "  <code>баскет гол 50</code>\n"
-    "  <code>футбол мимо 200</code>\n"
-    "  <code>дартс центр 500</code>\n"
-    "  <code>боулинг победа 150</code>\n"
+    '<b><tg-emoji emoji-id="5424972470023104089">👋</tg-emoji> Игры</b>\n\n'
+    '<blockquote><b><tg-emoji emoji-id="5197269100878907942">👋</tg-emoji>Текстовые команды:</b>\n\n'
+    "  <code>куб (исход) (сумма)</code>\n"
+    "  <code>баскет (исход) (сумма)</code>\n"
+    "  <code>фут (исход) (сумма)</code>\n"
+    "  <code>дартс (исход) (сумма)</code>\n"
+    "  <code>боулинг (исход) (сумма)</code>\n"
+    "<code>мины (сумма) (сложность)</code>\n"
+    "<code>башня (сумма) (сложность)</code>\n"
+    "<code>золото (сумма)</code>\n"
     "</blockquote>"
 )
 
@@ -496,7 +497,7 @@ async def cb_dice_menu(call: CallbackQuery):
         ],
         [InlineKeyboardButton(text="Назад", callback_data="games", icon_custom_emoji_id=EMOJI_BACK)],
     ])
-    await call.message.edit_text("<blockquote><b>🎲 Кубик — выберите тип ставки:</b></blockquote>",
+    await call.message.edit_text("<blockquote><b>🎲Кубик — выберите тип ставки ниже:</b></blockquote>",
                                  reply_markup=markup, parse_mode='HTML')
     set_owner_fn(call.message.message_id, call.from_user.id)
     await call.answer()
@@ -519,7 +520,7 @@ async def cb_dice_exact(call: CallbackQuery):
         ],
         [InlineKeyboardButton(text="Назад", callback_data="game_menu_dice", icon_custom_emoji_id=EMOJI_BACK)],
     ])
-    await call.message.edit_text("<blockquote><b>🎰 Точное число — выберите:</b></blockquote>",
+    await call.message.edit_text('<blockquote><b><tg-emoji emoji-id="5456140674028019486">👋</tg-emoji> Точное число — выберите:</b></blockquote>',
                                  reply_markup=markup, parse_mode='HTML')
     set_owner_fn(call.message.message_id, call.from_user.id)
     await call.answer()
@@ -537,7 +538,7 @@ async def cb_basketball_menu(call: CallbackQuery):
         ],
         [InlineKeyboardButton(text="Назад", callback_data="games", icon_custom_emoji_id=EMOJI_BACK)],
     ])
-    await call.message.edit_text("<blockquote><b>🏀 Баскетбол — выберите исход:</b></blockquote>",
+    await call.message.edit_text("<blockquote><b>🏀Баскетбол — выберите исход ниже:</b></blockquote>",
                                  reply_markup=markup, parse_mode='HTML')
     set_owner_fn(call.message.message_id, call.from_user.id)
     await call.answer()
@@ -554,7 +555,7 @@ async def cb_football_menu(call: CallbackQuery):
         ],
         [InlineKeyboardButton(text="Назад", callback_data="games", icon_custom_emoji_id=EMOJI_BACK)],
     ])
-    await call.message.edit_text("<blockquote><b>⚽ Футбол — выберите исход:</b></blockquote>",
+    await call.message.edit_text("<blockquote><b>⚽Футбол — выберите исход ниже:</b></blockquote>",
                                  reply_markup=markup, parse_mode='HTML')
     set_owner_fn(call.message.message_id, call.from_user.id)
     await call.answer()
@@ -575,7 +576,7 @@ async def cb_darts_menu(call: CallbackQuery):
         ],
         [InlineKeyboardButton(text="Назад", callback_data="games", icon_custom_emoji_id=EMOJI_BACK)],
     ])
-    await call.message.edit_text("<blockquote><b>🎯 Дартс — выберите исход:</b></blockquote>",
+    await call.message.edit_text("<blockquote><b>🎯Дартс — выберите исход ниже:</b></blockquote>",
                                  reply_markup=markup, parse_mode='HTML')
     set_owner_fn(call.message.message_id, call.from_user.id)
     await call.answer()
@@ -593,7 +594,7 @@ async def cb_bowling_menu(call: CallbackQuery):
         [InlineKeyboardButton(text="Страйк (x5.7)", callback_data="bet_боулинг_страйк", icon_custom_emoji_id=EMOJI_3POINT)],
         [InlineKeyboardButton(text="Назад", callback_data="games", icon_custom_emoji_id=EMOJI_BACK)],
     ])
-    await call.message.edit_text("<blockquote><b>🎳 Боулинг — выберите исход:</b></blockquote>",
+    await call.message.edit_text("<blockquote><b>🎳Боулинг — выберите исход ниже:</b></blockquote>",
                                  reply_markup=markup, parse_mode='HTML')
     set_owner_fn(call.message.message_id, call.from_user.id)
     await call.answer()
@@ -608,14 +609,14 @@ async def cb_request_amount(call: CallbackQuery, state: FSMContext):
 
     allowed, wait = _check_rate_limit(uid)
     if not allowed:
-        await call.answer(f"⏳ Подождите {wait} сек", show_alert=True); return
+        await call.answer(f"<b>⏳ Подождите!</b>", show_alert=True); return
 
     if uid in _active_games:
-        await call.answer("⏳ Дождитесь окончания игры!", show_alert=True); return
+        await call.answer("<b>⏳ Дождитесь окончания игры!</b>", show_alert=True); return
 
     bet_type = call.data[4:]  # убираем "bet_"
     if _get_bet_config(bet_type) is None:
-        await call.answer("❌ Неизвестная ставка", show_alert=True); return
+        await call.answer("❌<b>Неизвестная ставка!</b>", show_alert=True); return
 
     balance = db_get_px(uid)
     _pending_bets[uid] = bet_type
@@ -626,9 +627,7 @@ async def cb_request_amount(call: CallbackQuery, state: FSMContext):
         InlineKeyboardButton(text="Отмена", callback_data="cancel_bet", icon_custom_emoji_id=EMOJI_BACK)
     ]])
     await call.message.edit_text(
-        f"<blockquote><b>💰 Введите сумму ставки</b>\n\n"
-        f"Ваш баланс: <code>{balance:.2f} Px</code>\n"
-        f"Мин: <code>{MIN_BET}</code> | Макс: <code>{MAX_BET}</code></blockquote>",
+        f'<blockquote><b><tg-emoji emoji-id="5197269100878907942">👋</tg-emoji> Введите сумму ставки</b></blockquote>',
         parse_mode='HTML', reply_markup=markup
     )
     set_owner_fn(call.message.message_id, uid)
@@ -657,27 +656,27 @@ async def msg_process_amount(message: Message, state: FSMContext):
         return
 
     if uid in _active_games:
-        await message.answer("⏳ Дождитесь окончания текущей игры!")
+        await message.answer("<b>⏳Дождитесь окончания текущей игры!</b>")
         return
 
     try:
         amount = float(message.text.replace(',', '.'))
     except ValueError:
-        await message.answer("❌ Введите числовое значение, например: <code>100</code>", parse_mode='HTML')
+        await message.answer("<b>❌Введите числовое значение, например: <code>100</code></b>", parse_mode='HTML')
         return
 
     if amount < MIN_BET:
-        await message.answer(f"❌ Минимальная ставка: <code>{MIN_BET} Px</code>", parse_mode='HTML')
+        await message.answer(f"<b>❌Минимальная ставка: <code>{MIN_BET}</code></b>", parse_mode='HTML')
         return
     if amount > MAX_BET:
-        await message.answer(f"❌ Максимальная ставка: <code>{MAX_BET} Px</code>", parse_mode='HTML')
+        await message.answer(f"<b>❌Максимальная ставка: <code>{MAX_BET}</code></b>", parse_mode='HTML')
         return
 
     bet_type = _pending_bets.pop(uid, None)
     await state.clear()
 
     if bet_type is None:
-        await message.answer("❌ Сессия ставки истекла. Начните заново.")
+        await message.answer("❌Сессия ставки истекла! Начните заново.")
         return
 
     name = _nickname(message.from_user)
@@ -693,18 +692,17 @@ async def msg_text_bet(message: Message):
 
     allowed, wait = _check_rate_limit(uid)
     if not allowed:
-        await message.answer(f"⏳ Подождите {wait} сек перед следующей ставкой")
+        await message.answer(f"<b>⏳ Подождите!</b>")
         return
 
     if uid in _active_games:
-        await message.answer("⏳ Дождитесь окончания текущей игры!")
+        await message.answer("<b>⏳Дождитесь окончания текущей игры!</b>")
         return
 
     parsed = _parse_bet_command(message.text)
     if parsed is None:
         await message.answer(
-            "<blockquote>❌ <b>Неверный формат!</b>\n\n"
-            "Пример: <code>куб чет 100</code></blockquote>",
+            "<blockquote>❌<b>Неверный формат!</b>",
             parse_mode='HTML'
         )
         return
