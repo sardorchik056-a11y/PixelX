@@ -65,13 +65,13 @@ LISTINGS_PER_PAGE    = 10
 INVOICE_POLL_SECS    = 2
 INVOICE_MAX_SECS     = 600
 
-# Диапазоны фильтра Px (кнопки выбора диапазона)
+# Диапазоны фильтра Px — 4 кнопки под списком лотов
+# range_idx=-1 означает «все лоты» (фильтр не активен)
 PX_RANGES = [
-    ("Любое",         0,           10_000_000_000),
-    ("50к–200к",      50_000,      200_000),
-    ("200к–500к",     200_000,     500_000),
-    ("500к–1М",       500_000,     1_000_000),
-    ("1М+",           1_000_000,   10_000_000_000),
+    ("50к–200к",   50_000,      200_000),
+    ("200к–500к",  200_000,     500_000),
+    ("500к–1М",    500_000,     1_000_000),
+    ("1М–5М",      1_000_000,   5_000_000),
 ]
 
 # ── Emoji ───────────────────────────────────────────────────
@@ -84,7 +84,6 @@ EMOJI_STATS    = "5231200819986047254"
 EMOJI_SELL     = "5429651785352501917"
 EMOJI_BUY      = "5206607081334906820"
 EMOJI_WITHDRAW = "5443127283898405358"
-EMOJI_FILTER   = "5373017478466479017"
 
 # ── Инжектируемые зависимости ───────────────────────────────
 is_owner_fn  = lambda mid, uid: True
@@ -212,7 +211,7 @@ async def _edit_or_send(
 def _kb_exchange_main() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text="💸 Купить",     callback_data="ex_buy_0_0"),
+            InlineKeyboardButton(text="💸 Купить",     callback_data="ex_buy_0_-1"),
             InlineKeyboardButton(text="📤 Продать",    callback_data="ex_sell_start"),
         ],
         [
@@ -268,39 +267,19 @@ def _kb_confirm_sell() -> InlineKeyboardMarkup:
     ])
 
 
-def _kb_px_range_filter(current_range: int) -> InlineKeyboardMarkup:
-    """Кнопки выбора диапазона Px."""
-    rows = []
-    row = []
-    for i, (label, _, _) in enumerate(PX_RANGES):
-        mark = "✅ " if i == current_range else ""
-        row.append(InlineKeyboardButton(
-            text=f"{mark}{label}",
-            # ex_range_{i} применяет фильтр и сразу показывает лоты
-            callback_data=f"ex_range_{i}"
-        ))
-        if len(row) == 3:
-            rows.append(row)
-            row = []
-    if row:
-        rows.append(row)
-    # Назад → список лотов с текущим диапазоном (без смены фильтра)
-    rows.append([InlineKeyboardButton(
-        text="Назад", callback_data=f"ex_buy_0_{current_range}",
-        icon_custom_emoji_id=EMOJI_BACK
-    )])
-    return InlineKeyboardMarkup(inline_keyboard=rows)
-
-
 def _kb_listings(listings: list, page: int, total_pages: int, range_idx: int) -> InlineKeyboardMarkup:
+    """
+    range_idx: -1 = все лоты, 0-3 = конкретный диапазон PX_RANGES.
+    4 кнопки диапазона всегда видны под списком; активный помечен ✅.
+    """
     rows = []
     for lot in listings:
         lot_price = _lot_total_price(lot)
-        # Показываем цену за весь лот
         label = f'{int(lot["px_amount"]):,} Px → ${lot_price:.2f}'
         rows.append([InlineKeyboardButton(
             text=label, callback_data=f'ex_lot_{lot["id"]}_{range_idx}'
         )])
+    # Навигация по страницам
     nav = []
     if page > 0:
         nav.append(InlineKeyboardButton(text="◀️", callback_data=f"ex_buy_{page - 1}_{range_idx}"))
@@ -308,12 +287,18 @@ def _kb_listings(listings: list, page: int, total_pages: int, range_idx: int) ->
         nav.append(InlineKeyboardButton(text="▶️", callback_data=f"ex_buy_{page + 1}_{range_idx}"))
     if nav:
         rows.append(nav)
-    # Кнопка фильтра диапазона
-    range_label = PX_RANGES[range_idx][0]
-    rows.append([InlineKeyboardButton(
-        text=f"🔍 Диапазон: {range_label}",
-        callback_data=f"ex_filter_{range_idx}"
-    )])
+    # 4 кнопки диапазона (2+2)
+    range_row1 = []
+    range_row2 = []
+    for i, (label, _, _) in enumerate(PX_RANGES):
+        mark = "✅ " if i == range_idx else ""
+        btn = InlineKeyboardButton(text=f"{mark}{label}", callback_data=f"ex_range_{i}")
+        if i < 2:
+            range_row1.append(btn)
+        else:
+            range_row2.append(btn)
+    rows.append(range_row1)
+    rows.append(range_row2)
     rows.append([InlineKeyboardButton(
         text="Назад", callback_data="exchange", icon_custom_emoji_id=EMOJI_BACK
     )])
@@ -692,31 +677,13 @@ async def cb_sell_confirm(call: CallbackQuery, state: FSMContext):
     await call.answer()
 
 
-# ════════════════════════════════════════════════════════════
-#  ПОКУПКА — фильтр диапазона
-# ════════════════════════════════════════════════════════════
-@exchange_router.callback_query(F.data.startswith("ex_filter_"))
-async def cb_filter_range(call: CallbackQuery, state: FSMContext):
-    if not is_owner_fn(call.message.message_id, call.from_user.id):
-        await call.answer("🚫 Это не ваша кнопка!", show_alert=True)
-        return
-
-    current_range = int(call.data.split("_")[-1])
-    await call.message.edit_text(
-        f'<tg-emoji emoji-id="{EMOJI_FILTER}">🔍</tg-emoji> <b>Выберите диапазон Px</b>\n\n'
-        f'<blockquote>Фильтрует лоты по количеству Px в лоте:</blockquote>',
-        reply_markup=_kb_px_range_filter(current_range),
-    )
-    set_owner_fn(call.message.message_id, call.from_user.id)
-    await call.answer()
-
-
 @exchange_router.callback_query(F.data.startswith("ex_range_"))
 async def cb_select_range(call: CallbackQuery, state: FSMContext):
     if not is_owner_fn(call.message.message_id, call.from_user.id):
         await call.answer("🚫 Это не ваша кнопка!", show_alert=True)
         return
 
+    # range_idx — индекс в PX_RANGES (0..3)
     range_idx = int(call.data.split("_")[-1])
     uid = call.from_user.id
     await _show_buy_list(call, uid, page=0, range_idx=range_idx)
@@ -726,33 +693,34 @@ async def cb_select_range(call: CallbackQuery, state: FSMContext):
 #  ПОКУПКА — список лотов
 # ════════════════════════════════════════════════════════════
 async def _show_buy_list(call: CallbackQuery, uid: int, page: int, range_idx: int):
-    """Общий хелпер: рендерит список лотов с выбранным диапазоном и страницей."""
-    _, px_min, px_max = PX_RANGES[range_idx]
-    range_label = PX_RANGES[range_idx][0]
+    """
+    Хелпер: рендерит список лотов.
+    range_idx = -1 → все лоты (фильтр не активен).
+    range_idx = 0..3 → конкретный диапазон из PX_RANGES.
+    """
+    if range_idx >= 0:
+        label, px_min, px_max = PX_RANGES[range_idx]
+        range_label = label
+    else:
+        px_min, px_max = 0, 10_000_000_000
+        range_label = "Все"
 
     all_lots    = db_get_active_listings(exclude_uid=uid, px_min=px_min, px_max=px_max)
     total_pages = max(1, (len(all_lots) + LISTINGS_PER_PAGE - 1) // LISTINGS_PER_PAGE)
     page        = max(0, min(page, total_pages - 1))
     chunk       = all_lots[page * LISTINGS_PER_PAGE:(page + 1) * LISTINGS_PER_PAGE]
 
+    # Строим клавиатуру с 4 кнопками диапазона внизу (даже если лотов нет)
+    kb = _kb_listings(chunk, page, total_pages, range_idx)
+
     if not all_lots:
         text = (
             f'<tg-emoji emoji-id="{EMOJI_BUY}">💸</tg-emoji> <b>Покупка Px</b>\n\n'
             f'<blockquote>'
             f'Диапазон: <b>{range_label}</b>\n\n'
-            f'Активных лотов пока нет. Загляните позже!'
+            f'Лотов в этом диапазоне нет. Выберите другой!'
             f'</blockquote>'
         )
-        kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(
-                text=f"🔍 Диапазон: {range_label}",
-                callback_data=f"ex_filter_{range_idx}"
-            )],
-            [InlineKeyboardButton(
-                text="Назад", callback_data="exchange", icon_custom_emoji_id=EMOJI_BACK
-            )],
-        ])
-        await call.message.edit_text(text, reply_markup=kb, parse_mode=ParseMode.HTML)
     else:
         text = (
             f'<tg-emoji emoji-id="{EMOJI_BUY}">💸</tg-emoji> <b>Покупка Px</b>\n\n'
@@ -763,26 +731,25 @@ async def _show_buy_list(call: CallbackQuery, uid: int, page: int, range_idx: in
             f'Нажмите на лот для подробностей:'
             f'</blockquote>'
         )
-        await call.message.edit_text(
-            text,
-            reply_markup=_kb_listings(chunk, page, total_pages, range_idx),
-            parse_mode=ParseMode.HTML,
-        )
 
+    await call.message.edit_text(text, reply_markup=kb, parse_mode=ParseMode.HTML)
     set_owner_fn(call.message.message_id, uid)
     await call.answer()
 
 
-@exchange_router.callback_query(F.data.regexp(r'^ex_buy_\d+_\d+$'))
+@exchange_router.callback_query(F.data.regexp(r'^ex_buy_\d+_-?\d+$'))
 async def cb_buy_list(call: CallbackQuery, state: FSMContext):
     if not is_owner_fn(call.message.message_id, call.from_user.id):
         await call.answer("🚫 Это не ваша кнопка!", show_alert=True)
         return
 
-    uid   = call.from_user.id
-    parts = call.data.split("_")   # ['ex', 'buy', page, range_idx]
-    page      = int(parts[2])
-    range_idx = int(parts[3])
+    uid = call.from_user.id
+    # формат: ex_buy_{page}_{range_idx}  где range_idx может быть -1
+    # split даёт ['ex', 'buy', page, range_idx] или ['ex', 'buy', page, '-1'] -> нужно join last
+    raw = call.data[len("ex_buy_"):]        # "0_-1" или "0_2"
+    p_str, r_str = raw.rsplit("_", 1)
+    page      = int(p_str)
+    range_idx = int(r_str)
     await _show_buy_list(call, uid, page, range_idx)
 
 
