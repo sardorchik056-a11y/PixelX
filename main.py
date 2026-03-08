@@ -24,7 +24,7 @@ import gold as _gold_module
 from mine import mine_router, mine_watchdog
 from referrals import referral_router
 from bonus import bonus_router
-from game import game_router, init_game
+from game import game_router, game_low_router, init_game
 from tower import tower_router
 from mines import mines_router
 from gold import gold_router
@@ -876,6 +876,7 @@ async def cmd_balance_text(message: Message):
 #  low_priority_router подключается ПОСЛЕДНИМ
 # ─────────────────────────────────────────
 dp.include_router(low_priority_router)
+dp.include_router(game_low_router)
 
 
 # ─────────────────────────────────────────
