@@ -17,6 +17,7 @@ from typing import Optional, Dict, Tuple
 
 from aiogram import Bot, Router, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
@@ -132,6 +133,11 @@ BET_TYPE_MAPPING = {
     'страйк': 'боулинг_страйк', 'strike': 'боулинг_страйк',
 }
 
+# Слова для вызова меню игр (одиночное слово без аргументов)
+_GAMES_WORDS = {
+    "games", "игры", "игра", "game",
+}
+
 # ─────────────────────────────────────────
 #  FSM
 # ─────────────────────────────────────────
@@ -210,15 +216,15 @@ def _parse_bet_command(text: str) -> Optional[Tuple[str, float]]:
         return None
     # Специальные ключи гол/мимо зависят от игры
     if game_prefix == 'баскет':
-        if bet_key in ('гол', 'goal'):   full = 'баскет_гол'
+        if bet_key in ('гол', 'goal'):    full = 'баскет_гол'
         elif bet_key in ('мимо', 'miss'): full = 'баскет_мимо'
         else:                             full = BET_TYPE_MAPPING.get(bet_key)
     elif game_prefix == 'футбол':
-        if bet_key in ('гол', 'goal'):   full = 'футбол_гол'
+        if bet_key in ('гол', 'goal'):    full = 'футбол_гол'
         elif bet_key in ('мимо', 'miss'): full = 'футбол_мимо'
         else:                             full = BET_TYPE_MAPPING.get(bet_key)
     elif game_prefix == 'дартс':
-        if bet_key in ('мимо', 'miss'):  full = 'дартс_мимо'
+        if bet_key in ('мимо', 'miss'):   full = 'дартс_мимо'
         else:                             full = BET_TYPE_MAPPING.get(bet_key)
     else:
         full = BET_TYPE_MAPPING.get(bet_key)
@@ -252,17 +258,13 @@ LOSE_TEXT = (
 
 async def _play_single(chat_id: int, uid: int, name: str, amount: float,
                        bet_type: str, cfg: dict, reply_msg: Message = None):
-    """
-    Фаза 1 → бросок кубика (ошибка здесь = raise → вызывающий вернёт деньги).
-    Фаза 2 → определение исхода и отправка результата (ошибка = только лог).
-    """
     emoji = _dice_emoji(bet_type)
 
     # ── ФАЗА 1: отправка кубика ──────────────────────────────────────────────
     kwargs = {"chat_id": chat_id, "emoji": emoji}
     if reply_msg:
         kwargs["reply_to_message_id"] = reply_msg.message_id
-    dice_msg = await _bot.send_dice(**kwargs)   # если упадёт — вызывающий вернёт деньги
+    dice_msg = await _bot.send_dice(**kwargs)
 
     # ── ФАЗА 2: исход — деньги НЕ возвращаем ни при каких ошибках ────────────
     try:
@@ -280,12 +282,10 @@ async def _play_single(chat_id: int, uid: int, name: str, amount: float,
 
     except Exception as e:
         logging.error(f"[game] Ошибка в фазе 2 (single, uid={uid}): {e}")
-        # Исход определён Telegram-сервером — средства НЕ возвращаются
 
 
 async def _play_double_dice(chat_id: int, uid: int, name: str, amount: float,
                             bet_type: str, cfg: dict, reply_msg: Message = None):
-    """Два кубика. Возврат средств только если первый бросок не случился."""
     kwargs = {"chat_id": chat_id, "emoji": "🎲"}
     if reply_msg:
         kwargs["reply_to_message_id"] = reply_msg.message_id
@@ -293,7 +293,7 @@ async def _play_double_dice(chat_id: int, uid: int, name: str, amount: float,
     # ── ФАЗА 1: первый кубик ─────────────────────────────────────────────────
     dice1 = await _bot.send_dice(**kwargs)
 
-    # ── ФАЗА 2: остальное — без возврата ─────────────────────────────────────
+    # ── ФАЗА 2: без возврата ─────────────────────────────────────────────────
     try:
         await asyncio.sleep(2)
         dice2 = await _bot.send_dice(chat_id=chat_id, emoji="🎲")
@@ -317,7 +317,6 @@ async def _play_double_dice(chat_id: int, uid: int, name: str, amount: float,
 
 async def _play_bowling_vs(chat_id: int, uid: int, name: str, amount: float,
                            bet_type: str, cfg: dict, reply_msg: Message = None):
-    """Боулинг vs бот. Возврат средств только если первый бросок не случился."""
     kwargs = {"chat_id": chat_id, "emoji": "🎳"}
     if reply_msg:
         kwargs["reply_to_message_id"] = reply_msg.message_id
@@ -334,7 +333,6 @@ async def _play_bowling_vs(chat_id: int, uid: int, name: str, amount: float,
         pv = p_roll.dice.value
         bv = b_roll.dice.value
 
-        # Ничья — перебрасываем до победителя
         reruns = 0
         while pv == bv and reruns < 5:
             reruns += 1
@@ -372,12 +370,6 @@ async def _play_bowling_vs(chat_id: int, uid: int, name: str, amount: float,
 # ─────────────────────────────────────────
 async def _run_game(chat_id: int, uid: int, name: str, amount: float,
                     bet_type: str, cfg: dict, reply_msg: Message = None):
-    """
-    Вызывает нужную игровую функцию.
-    Если кубик ЕЩЁ НЕ был брошен (Фаза 1 упала) → поднимаем исключение выше,
-    чтобы вызывающий вернул деньги.
-    Если кубик уже брошен → исключение глотается внутри play-функций.
-    """
     if bet_type in ('куб_2меньше', 'куб_2больше'):
         await _play_double_dice(chat_id, uid, name, amount, bet_type, cfg, reply_msg)
     elif bet_type.startswith('боулинг_') and cfg.get('special') == 'bowling_vs':
@@ -391,18 +383,11 @@ async def _run_game(chat_id: int, uid: int, name: str, amount: float,
 # ─────────────────────────────────────────
 async def _execute_bet(uid: int, name: str, amount: float,
                        bet_type: str, reply_msg: Message, fallback_chat_id: int):
-    """
-    1. Списывает ставку атомарно (db_try_spend_px).
-    2. Запускает игру.
-    3. Если Фаза 1 упала → возвращает деньги (безопасно, кубик не летел).
-    4. Фаза 2 никогда не возвращает деньги.
-    """
     cfg = _get_bet_config(bet_type)
     if cfg is None:
         await _bot.send_message(fallback_chat_id, "❌Неизвестный тип ставки!")
         return
 
-    # Атомарное списание
     if not db_try_spend_px(uid, amount):
         await _bot.send_message(
             fallback_chat_id,
@@ -415,7 +400,6 @@ async def _execute_bet(uid: int, name: str, amount: float,
     try:
         await _run_game(fallback_chat_id, uid, name, amount, bet_type, cfg, reply_msg)
     except Exception as e:
-        # Сюда попадаем только если кубик НЕ был брошен (Фаза 1 упала)
         logging.error(f"[game] Ошибка Фазы 1 (uid={uid}): {e} — возвращаем средства")
         db_add_px(uid, amount)
         try:
@@ -470,6 +454,48 @@ GAMES_TEXT = (
     "  <code>золото (сумма)</code>\n"
     "</blockquote>"
 )
+
+
+# ─────────────────────────────────────────
+#  Хэлпер: отправить меню игр
+#  Используется и в callback, и в текстовых командах
+# ─────────────────────────────────────────
+async def _send_games_menu(message: Message):
+    """Отправляет меню игр новым сообщением (для чата/команды)."""
+    sent = await message.answer(GAMES_TEXT, reply_markup=games_keyboard(), parse_mode='HTML')
+    set_owner_fn(sent.message_id, message.from_user.id)
+
+
+# ─────────────────────────────────────────
+#  Команды для вызова меню игр
+#  /games  /игры  — со слешем
+#  games   игры   игра   game — без слеша, только одно слово
+# ─────────────────────────────────────────
+
+# Слеш-команды: /games и /игры
+@game_router.message(Command("games"))
+async def cmd_games_slash_en(message: Message):
+    await _send_games_menu(message)
+
+
+@game_router.message(Command("игры"))
+async def cmd_games_slash_ru(message: Message):
+    await _send_games_menu(message)
+
+
+# Текстовые без слеша — только если сообщение ровно одно слово из списка
+@game_router.message(F.text)
+async def cmd_games_text(message: Message):
+    text = (message.text or "").strip()
+
+    # Только одно слово — никаких пробелов
+    if " " in text or "\n" in text:
+        return
+
+    if text.lower() not in _GAMES_WORDS:
+        return
+
+    await _send_games_menu(message)
 
 
 # ─────────────────────────────────────────
@@ -624,7 +650,7 @@ async def cb_request_amount(call: CallbackQuery, state: FSMContext):
     if uid in _active_games:
         await call.answer("<b>⏳ Дождитесь окончания игры!</b>", show_alert=True); return
 
-    bet_type = call.data[4:]  # убираем "bet_"
+    bet_type = call.data[4:]
     if _get_bet_config(bet_type) is None:
         await call.answer("❌<b>Неизвестная ставка!</b>", show_alert=True); return
 
