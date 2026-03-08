@@ -87,6 +87,8 @@ EMOJI_WITHDRAW = "5443127283898405358"
 EMOJI_BUY = "5449683594425410231"
 EMOJI_SELL = "5447183459602669338"
 EMOJI_VIV = "5445355530111437729"
+EMOJI_TAKE = "5206607081334906820"
+EMOJI_REJECT = "5210952531676504517"
 
 # ── Инжектируемые зависимости ───────────────────────────────
 is_owner_fn  = lambda mid, uid: True
@@ -264,8 +266,8 @@ def _kb_duration() -> InlineKeyboardMarkup:
 def _kb_confirm_sell() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text="✅ Подтвердить", callback_data="ex_sell_confirm"),
-            InlineKeyboardButton(text="❌ Отмена",       callback_data="exchange"),
+            InlineKeyboardButton(text="Подтвердить", callback_data="ex_sell_confirm", icon_custom_emoji_id=EMOJI_TAKE),
+            InlineKeyboardButton(text="Отмена",       callback_data="exchange", icon_custom_emoji_id=EMOJI_REJECT),
         ],
     ])
 
@@ -330,8 +332,8 @@ def _kb_cancel_withdraw() -> InlineKeyboardMarkup:
 def _kb_confirm_withdraw() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text="✅ Подать заявку", callback_data="ex_withdraw_confirm"),
-            InlineKeyboardButton(text="❌ Отмена",         callback_data="exchange"),
+            InlineKeyboardButton(text=" Подать заявку", callback_data="ex_withdraw_confirm", icon_custom_emoji_id=EMOJI_TAKE),
+            InlineKeyboardButton(text=" Отмена",         callback_data="exchange", icon_custom_emoji_id=EMOJI_REJECT),
         ],
     ])
 
@@ -378,8 +380,8 @@ def _kb_my_lot_detail(lot_id: int) -> InlineKeyboardMarkup:
 def _kb_confirm_cancel_lot(lot_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text="✅ Да, отменить", callback_data=f"ex_cancel_lot_ok_{lot_id}"),
-            InlineKeyboardButton(text="❌ Нет",           callback_data=f"ex_my_lot_{lot_id}"),
+            InlineKeyboardButton(text="Да, отменить", callback_data=f"ex_cancel_lot_ok_{lot_id}", icon_custom_emoji_id=EMOJI_TAKE),
+            InlineKeyboardButton(text="Нет",           callback_data=f"ex_my_lot_{lot_id}", icon_custom_emoji_id=EMOJI_REJECT),
         ],
     ])
 
