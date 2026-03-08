@@ -29,7 +29,6 @@ from database import (
 )
 
 
-
 logging.basicConfig(level=logging.INFO)
 
 # ─────────────────────────────────────────
@@ -133,10 +132,8 @@ BET_TYPE_MAPPING = {
     'страйк': 'боулинг_страйк', 'strike': 'боулинг_страйк',
 }
 
-# Слова для вызова меню игр (одиночное слово без аргументов)
-_GAMES_WORDS = {
-    "games", "игры", "игра", "game",
-}
+# Слова для вызова меню игр (одиночное слово)
+_GAMES_WORDS = {"games", "игры", "игра", "game"}
 
 # ─────────────────────────────────────────
 #  FSM
@@ -148,13 +145,17 @@ class BetStates(StatesGroup):
 #  Состояние модуля (инициализируется из main.py)
 # ─────────────────────────────────────────
 _bot: Bot = None
-_active_games: Dict[int, datetime] = {}          # user_id → время начала
-_pending_bets: Dict[int, str] = {}               # user_id → bet_type
-_rate_limit: Dict[int, datetime] = {}            # user_id → последняя ставка
+_active_games: Dict[int, datetime] = {}
+_pending_bets: Dict[int, str] = {}
+_rate_limit: Dict[int, datetime] = {}
 is_owner_fn  = lambda mid, uid: True
 set_owner_fn = lambda mid, uid: None
 
+# ── game_router — основной, подключается в main.py первым среди игровых ──
 game_router = Router()
+
+# ── game_low_router — только F.text для слов-команд, подключается ПОСЛЕДНИМ ──
+game_low_router = Router()
 
 
 def init_game(bot: Bot):
@@ -214,7 +215,6 @@ def _parse_bet_command(text: str) -> Optional[Tuple[str, float]]:
     game_prefix = COMMAND_MAPPING.get(game)
     if not game_prefix:
         return None
-    # Специальные ключи гол/мимо зависят от игры
     if game_prefix == 'баскет':
         if bet_key in ('гол', 'goal'):    full = 'баскет_гол'
         elif bet_key in ('мимо', 'miss'): full = 'баскет_мимо'
@@ -259,18 +259,14 @@ LOSE_TEXT = (
 async def _play_single(chat_id: int, uid: int, name: str, amount: float,
                        bet_type: str, cfg: dict, reply_msg: Message = None):
     emoji = _dice_emoji(bet_type)
-
-    # ── ФАЗА 1: отправка кубика ──────────────────────────────────────────────
     kwargs = {"chat_id": chat_id, "emoji": emoji}
     if reply_msg:
         kwargs["reply_to_message_id"] = reply_msg.message_id
     dice_msg = await _bot.send_dice(**kwargs)
 
-    # ── ФАЗА 2: исход — деньги НЕ возвращаем ни при каких ошибках ────────────
     try:
         await asyncio.sleep(3)
         is_win = dice_msg.dice.value in cfg.get('values', [])
-
         if is_win:
             winnings = round(amount * cfg['multiplier'], 2)
             db_add_px(uid, winnings)
@@ -279,7 +275,6 @@ async def _play_single(chat_id: int, uid: int, name: str, amount: float,
         else:
             db_record_game_result(uid, amount, 0.0)
             await dice_msg.reply(LOSE_TEXT.format(name=name), parse_mode='HTML')
-
     except Exception as e:
         logging.error(f"[game] Ошибка в фазе 2 (single, uid={uid}): {e}")
 
@@ -289,19 +284,14 @@ async def _play_double_dice(chat_id: int, uid: int, name: str, amount: float,
     kwargs = {"chat_id": chat_id, "emoji": "🎲"}
     if reply_msg:
         kwargs["reply_to_message_id"] = reply_msg.message_id
-
-    # ── ФАЗА 1: первый кубик ─────────────────────────────────────────────────
     dice1 = await _bot.send_dice(**kwargs)
 
-    # ── ФАЗА 2: без возврата ─────────────────────────────────────────────────
     try:
         await asyncio.sleep(2)
         dice2 = await _bot.send_dice(chat_id=chat_id, emoji="🎲")
         await asyncio.sleep(3)
-
         v1, v2 = dice1.dice.value, dice2.dice.value
         is_win = (v1 < 4 and v2 < 4) if bet_type == 'куб_2меньше' else (v1 > 3 and v2 > 3)
-
         if is_win:
             winnings = round(amount * cfg['multiplier'], 2)
             db_add_px(uid, winnings)
@@ -310,7 +300,6 @@ async def _play_double_dice(chat_id: int, uid: int, name: str, amount: float,
         else:
             db_record_game_result(uid, amount, 0.0)
             await dice2.reply(LOSE_TEXT.format(name=name), parse_mode='HTML')
-
     except Exception as e:
         logging.error(f"[game] Ошибка в фазе 2 (double, uid={uid}): {e}")
 
@@ -320,19 +309,14 @@ async def _play_bowling_vs(chat_id: int, uid: int, name: str, amount: float,
     kwargs = {"chat_id": chat_id, "emoji": "🎳"}
     if reply_msg:
         kwargs["reply_to_message_id"] = reply_msg.message_id
-
-    # ── ФАЗА 1: первый бросок игрока ─────────────────────────────────────────
     p_roll = await _bot.send_dice(**kwargs)
 
-    # ── ФАЗА 2: без возврата ─────────────────────────────────────────────────
     try:
         await asyncio.sleep(2)
         b_roll = await _bot.send_dice(chat_id=chat_id, emoji="🎳")
         await asyncio.sleep(3)
-
         pv = p_roll.dice.value
         bv = b_roll.dice.value
-
         reruns = 0
         while pv == bv and reruns < 5:
             reruns += 1
@@ -344,14 +328,12 @@ async def _play_bowling_vs(chat_id: int, uid: int, name: str, amount: float,
             await asyncio.sleep(3)
             pv = p_roll.dice.value
             bv = b_roll.dice.value
-
         if bet_type == 'боулинг_победа':
             is_win = pv > bv
         elif bet_type == 'боулинг_поражение':
             is_win = pv < bv
         else:
             is_win = False
-
         if is_win:
             winnings = round(amount * cfg['multiplier'], 2)
             db_add_px(uid, winnings)
@@ -360,14 +342,10 @@ async def _play_bowling_vs(chat_id: int, uid: int, name: str, amount: float,
         else:
             db_record_game_result(uid, amount, 0.0)
             await b_roll.reply(LOSE_TEXT.format(name=name), parse_mode='HTML')
-
     except Exception as e:
         logging.error(f"[game] Ошибка в фазе 2 (bowling, uid={uid}): {e}")
 
 
-# ─────────────────────────────────────────
-#  Единая точка запуска игры
-# ─────────────────────────────────────────
 async def _run_game(chat_id: int, uid: int, name: str, amount: float,
                     bet_type: str, cfg: dict, reply_msg: Message = None):
     if bet_type in ('куб_2меньше', 'куб_2больше'):
@@ -378,9 +356,6 @@ async def _run_game(chat_id: int, uid: int, name: str, amount: float,
         await _play_single(chat_id, uid, name, amount, bet_type, cfg, reply_msg)
 
 
-# ─────────────────────────────────────────
-#  Общий движок: списание → игра → освобождение слота
-# ─────────────────────────────────────────
 async def _execute_bet(uid: int, name: str, amount: float,
                        bet_type: str, reply_msg: Message, fallback_chat_id: int):
     cfg = _get_bet_config(bet_type)
@@ -456,23 +431,14 @@ GAMES_TEXT = (
 )
 
 
-# ─────────────────────────────────────────
-#  Хэлпер: отправить меню игр
-#  Используется и в callback, и в текстовых командах
-# ─────────────────────────────────────────
 async def _send_games_menu(message: Message):
-    """Отправляет меню игр новым сообщением (для чата/команды)."""
     sent = await message.answer(GAMES_TEXT, reply_markup=games_keyboard(), parse_mode='HTML')
     set_owner_fn(sent.message_id, message.from_user.id)
 
 
 # ─────────────────────────────────────────
-#  Команды для вызова меню игр
-#  /games  /игры  — со слешем
-#  games   игры   игра   game — без слеша, только одно слово
+#  Слеш-команды /games /игры — в game_router (высокий приоритет)
 # ─────────────────────────────────────────
-
-# Слеш-команды: /games и /игры
 @game_router.message(Command("games"))
 async def cmd_games_slash_en(message: Message):
     await _send_games_menu(message)
@@ -480,21 +446,6 @@ async def cmd_games_slash_en(message: Message):
 
 @game_router.message(Command("игры"))
 async def cmd_games_slash_ru(message: Message):
-    await _send_games_menu(message)
-
-
-# Текстовые без слеша — только если сообщение ровно одно слово из списка
-@game_router.message(F.text)
-async def cmd_games_text(message: Message):
-    text = (message.text or "").strip()
-
-    # Только одно слово — никаких пробелов
-    if " " in text or "\n" in text:
-        return
-
-    if text.lower() not in _GAMES_WORDS:
-        return
-
     await _send_games_menu(message)
 
 
@@ -654,9 +605,7 @@ async def cb_request_amount(call: CallbackQuery, state: FSMContext):
     if _get_bet_config(bet_type) is None:
         await call.answer("❌<b>Неизвестная ставка!</b>", show_alert=True); return
 
-    balance = db_get_px(uid)
     _pending_bets[uid] = bet_type
-
     await state.set_state(BetStates.waiting_for_amount)
 
     markup = InlineKeyboardMarkup(inline_keyboard=[[
@@ -746,3 +695,21 @@ async def msg_text_bet(message: Message):
     bet_type, amount = parsed
     name = _nickname(message.from_user)
     await _execute_bet(uid, name, amount, bet_type, message, message.chat.id)
+
+
+# ─────────────────────────────────────────
+#  Текстовые слова без слеша: игры / games / игра / game
+#  Регистрируется в game_low_router — подключается ПОСЛЕДНИМ в main.py
+# ─────────────────────────────────────────
+@game_low_router.message(F.text)
+async def cmd_games_text(message: Message):
+    text = (message.text or "").strip()
+
+    # Только одно слово — никаких пробелов
+    if " " in text or "\n" in text:
+        return
+
+    if text.lower() not in _GAMES_WORDS:
+        return
+
+    await _send_games_menu(message)
