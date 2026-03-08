@@ -1,7 +1,7 @@
 import asyncio
 import os
 from datetime import datetime
-from aiogram import Bot, Dispatcher, F
+from aiogram import Bot, Dispatcher, F, Router
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import CommandStart, CommandObject, Command
 from aiogram.enums import ParseMode
@@ -142,6 +142,7 @@ class PromoStates(StatesGroup):
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp  = Dispatcher(storage=MemoryStorage())
 
+# ── Роутеры других модулей подключаются ПЕРВЫМИ ──
 dp.include_router(mine_router)
 dp.include_router(referral_router)
 dp.include_router(bonus_router)
@@ -149,6 +150,9 @@ dp.include_router(game_router)
 dp.include_router(tower_router)
 dp.include_router(mines_router)
 dp.include_router(gold_router)
+
+# ── Роутер с низким приоритетом (баланс, промо-текст) — подключится ПОСЛЕДНИМ в конце файла ──
+low_priority_router = Router()
 
 
 # ─────────────────────────────────────────
@@ -367,7 +371,7 @@ async def _activate_promo(uid: int, code: str) -> str:
 
 
 # ─────────────────────────────────────────
-#  Хэндлеры — основные
+#  Хэндлеры — основные (регистрируются в dp)
 # ─────────────────────────────────────────
 @dp.message(CommandStart())
 async def cmd_start(message: Message, command: CommandObject, state: FSMContext):
@@ -526,7 +530,7 @@ async def handle_promo_input(message: Message, state: FSMContext):
 
 
 # ─────────────────────────────────────────
-#  Промокоды — команды для чата
+#  Промокоды — команды для чата (/promo, promo, промо)
 # ─────────────────────────────────────────
 @dp.message(Command("promo"))
 async def cmd_promo_slash(message: Message, command: CommandObject):
@@ -561,16 +565,11 @@ async def cmd_promo_text(message: Message):
 
 # ─────────────────────────────────────────
 #  Перевод Px — /pay /gift /дать
-#  Использование: в ответ на сообщение + сумма
-#  Пример: /gift 500  (ответом на сообщение получателя)
-#  Игнорируется если денег не хватает
 # ─────────────────────────────────────────
 async def _handle_transfer(message: Message, amount_str: str):
-    """Общая логика перевода для /pay, /gift, /дать."""
     sender = message.from_user
     uid    = sender.id
 
-    # Команда должна быть ответом на чьё-то сообщение
     if not message.reply_to_message:
         await message.reply(
             f'<tg-emoji emoji-id="{EMOJI_GOLD}">⚡</tg-emoji> <b>Как сделать перевод?</b>\n\n'
@@ -581,34 +580,27 @@ async def _handle_transfer(message: Message, amount_str: str):
 
     target_user = message.reply_to_message.from_user
 
-    # Нельзя переводить самому себе
     if target_user.id == uid:
         return
-
-    # Нельзя переводить ботам
     if target_user.is_bot:
         return
 
-    # Парсим сумму
     amount_str = amount_str.strip().replace(",", ".")
     try:
         amount = float(amount_str)
     except ValueError:
-        return  # невалидная сумма — игнорируем
+        return
 
     if amount <= 0:
         return
 
-    # Убеждаемся что оба зарегистрированы
     db_get_or_create_user(sender)
     db_get_or_create_user(target_user)
 
-    # Атомарное списание — если денег нет, просто игнорируем
     success = db_try_spend_px(uid, amount)
     if not success:
         return  # недостаточно средств — тихо игнорируем
 
-    # Зачисляем получателю
     db_add_px(target_user.id, amount)
 
     sender_name = f"<a href='tg://user?id={uid}'>{sender.first_name}</a>"
@@ -637,47 +629,6 @@ async def cmd_gift(message: Message, command: CommandObject):
 @dp.message(Command("дать"))
 async def cmd_dat(message: Message, command: CommandObject):
     await _handle_transfer(message, command.args or "")
-
-
-# ─────────────────────────────────────────
-#  Баланс — б Б B b bal Bal balance баланс бал балик
-#  Только если сообщение состоит РОВНО из одного слова
-# ─────────────────────────────────────────
-
-# Список допустимых слов в любом регистре
-_BALANCE_WORDS = {
-    "б", "б", "b",          # одна буква
-    "bal", "balance",        # английские
-    "баланс", "бал", "балик" # русские
-}
-
-
-@dp.message(F.text)
-async def cmd_balance_text(message: Message):
-    text = (message.text or "").strip()
-
-    # Сообщение должно быть ровно одним словом — никакого пробела
-    if " " in text or "\n" in text:
-        return
-
-    if text.lower() not in _BALANCE_WORDS:
-        return
-
-    uid  = message.from_user.id
-    db_get_or_create_user(message.from_user)
-    user = db_get_user(uid)
-
-    if not user:
-        return
-
-    await message.reply(
-        f'<tg-emoji emoji-id="{EMOJI_GOLD}">⚡</tg-emoji> <b>Баланс</b>\n\n'
-        f'<blockquote>'
-        f'<tg-emoji emoji-id="{EMOJI_GOLD}">⚡</tg-emoji>  <b>Баланс:</b> <code>{user["px"]:,.2f} Px</code>\n'
-        f'<tg-emoji emoji-id="5429651785352501917">⚡</tg-emoji>  <b>Выиграно:</b> <code>{user["total_won"]:,.2f} Px</code>\n'
-        f'<tg-emoji emoji-id="5429518319243775957">⚡</tg-emoji>  <b>Проиграно:</b> <code>{user["total_lost"]:,.2f} Px</code>'
-        f'</blockquote>'
-    )
 
 
 # ─────────────────────────────────────────
@@ -738,6 +689,51 @@ async def cmd_addpromo(message: Message):
             f'❌ Промокод <code>{code}</code> уже существует!\n'
             f'Выберите другой код!'
         )
+
+
+# ─────────────────────────────────────────
+#  Баланс — регистрируется в low_priority_router
+#  ПОСЛЕДНИМ чтобы не перехватывать команды других модулей
+# ─────────────────────────────────────────
+_BALANCE_WORDS = {
+    "б", "b",
+    "bal", "balance",
+    "баланс", "бал", "балик",
+}
+
+
+@low_priority_router.message(F.text)
+async def cmd_balance_text(message: Message):
+    text = (message.text or "").strip()
+
+    # Только одно слово — никаких пробелов
+    if " " in text or "\n" in text:
+        return
+
+    if text.lower() not in _BALANCE_WORDS:
+        return
+
+    uid = message.from_user.id
+    db_get_or_create_user(message.from_user)
+    user = db_get_user(uid)
+
+    if not user:
+        return
+
+    await message.reply(
+        f'<tg-emoji emoji-id="{EMOJI_GOLD}">⚡</tg-emoji> <b>Баланс</b>\n\n'
+        f'<blockquote>'
+        f'<tg-emoji emoji-id="{EMOJI_GOLD}">⚡</tg-emoji>  <b>Баланс:</b> <code>{user["px"]:,.2f} Px</code>\n'
+        f'<tg-emoji emoji-id="5429651785352501917">⚡</tg-emoji>  <b>Выиграно:</b> <code>{user["total_won"]:,.2f} Px</code>\n'
+        f'<tg-emoji emoji-id="5429518319243775957">⚡</tg-emoji>  <b>Проиграно:</b> <code>{user["total_lost"]:,.2f} Px</code>'
+        f'</blockquote>'
+    )
+
+
+# ─────────────────────────────────────────
+#  low_priority_router подключается ПОСЛЕДНИМ
+# ─────────────────────────────────────────
+dp.include_router(low_priority_router)
 
 
 # ─────────────────────────────────────────
