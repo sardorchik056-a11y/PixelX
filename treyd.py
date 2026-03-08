@@ -58,7 +58,7 @@ logger = logging.getLogger(__name__)
 # ──────────────────────────────────────────────────────────
 #  Конфиг
 # ──────────────────────────────────────────────────────────
-CRYPTOBOT_TOKEN   = os.getenv("CRYPTOBOT_TOKEN", "")
+# CRYPTOBOT_TOKEN читается в _cryptopay_request каждый раз — чтобы load_dotenv() успел сработать
 CRYPTOBOT_API_URL = "https://pay.crypt.bot/api"   # mainnet
 # CRYPTOBOT_API_URL = "https://testnet-pay.crypt.bot/api"  # testnet
 
@@ -126,9 +126,10 @@ exchange_router = Router()
 #  CryptoPay helpers
 # ──────────────────────────────────────────────────────────
 async def _cryptopay_request(method: str, payload: dict) -> dict:
-    if not CRYPTOBOT_TOKEN:
+    token = os.getenv("CRYPTOBOT_TOKEN", "")
+    if not token:
         raise RuntimeError("CRYPTOBOT_TOKEN не задан в .env!")
-    headers = {"Crypto-Pay-API-Token": CRYPTOBOT_TOKEN}
+    headers = {"Crypto-Pay-API-Token": token}
     url = f"{CRYPTOBOT_API_URL}/{method}"
     async with aiohttp.ClientSession() as session:
         async with session.post(
