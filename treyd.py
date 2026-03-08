@@ -388,15 +388,15 @@ def _text_main(uid: int) -> str:
     return (
         f'<tg-emoji emoji-id="{EMOJI_EXCHANGE}">💱</tg-emoji> <b>Биржа PixelX</b>\n\n'
         f'<blockquote>'
-        f'💵  <b>Баланс $:</b> <code>${usd:.2f}</code>\n'
+        f'<tg-emoji emoji-id="5197434882321567830">💱</tg-emoji>  <b>Баланс $:</b> <code>${usd:.2f}</code>\n'
         f'<tg-emoji emoji-id="{EMOJI_GOLD}">⚡</tg-emoji>  '
         f'<b>Баланс Px:</b> <code>{px:,.0f} Px</code>'
         f'</blockquote>\n\n'
         f'<blockquote>'
-        f'Продавайте Px за $, покупайте лоты других игроков.\n'
-        f'Комиссия: <b>15%</b> от продажи · <b>3%</b> при выводе · <b>5%</b> при отмене лота\n'
-        f'Лимит: <b>{MAX_ACTIVE_LOTS}</b> активных лота на продавца'
+        f'<b><tg-emoji emoji-id="5429651785352501917">💱</tg-emoji>Покупка $-Px <code>50000-1mlrd Px</code>,/b>\n'
+        f'<b><tg-emoji emoji-id="5429518319243775957">💱</tg-emoji>Продажа Px-$ <code>50000-1mlrd Px</code></b>\n'
         f'</blockquote>'
+    
     )
 
 
