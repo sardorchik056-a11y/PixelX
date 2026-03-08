@@ -3,10 +3,12 @@ import os
 from datetime import datetime
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.filters import CommandStart, CommandObject
+from aiogram.filters import CommandStart, CommandObject, Command
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
 
 from dotenv import load_dotenv
 
@@ -37,6 +39,8 @@ from database import (
     db_try_reward_referral,
     db_is_already_referred,
     REFERRAL_REWARD_PX,
+    db_create_promo,
+    db_use_promo,
 )
 
 load_dotenv()
@@ -50,6 +54,13 @@ if not BOT_TOKEN:
         "2. Есть ли в нем строка BOT_TOKEN=ваш_токен\n"
         "3. Нет ли пробелов или кавычек вокруг токена"
     )
+
+# ─────────────────────────────────────────
+#  Админы — впишите сюда свои Telegram ID
+# ─────────────────────────────────────────
+ADMIN_IDS: list[int] = [
+    123456789,  # ← замените на ваш Telegram ID
+]
 
 # ─────────────────────────────────────────
 #  Emoji IDs
@@ -96,39 +107,39 @@ def is_owner(message_id: int, user_id: int) -> bool:
 
 
 def inject_to_modules(bot: Bot):
-    # mine
     _mine_module.set_bot_ref(bot)
     _mine_module.set_owner_fn = set_owner
     _mine_module.is_owner_fn  = is_owner
     _mine_module.get_px_fn    = db_get_px
     _mine_module.add_px_fn    = db_add_px
     _mine_module.spend_px_fn  = db_spend_px
-    # referrals
     _referral_module.is_owner_fn  = is_owner
     _referral_module.set_owner_fn = set_owner
-    # bonus
     _bonus_module.is_owner_fn  = is_owner
     _bonus_module.set_owner_fn = set_owner
-    # game
     _game_module.is_owner_fn  = is_owner
     _game_module.set_owner_fn = set_owner
     init_game(bot)
-    # tower
     _tower_module.is_owner_fn  = is_owner
     _tower_module.set_owner_fn = set_owner
-    # mines
     _mines_module.is_owner_fn  = is_owner
     _mines_module.set_owner_fn = set_owner
-    # gold
     _gold_module.is_owner_fn  = is_owner
     _gold_module.set_owner_fn = set_owner
 
 
 # ─────────────────────────────────────────
-#  Bot + Dispatcher (с FSM-хранилищем)
+#  FSM состояния
+# ─────────────────────────────────────────
+class PromoStates(StatesGroup):
+    waiting_for_code = State()
+
+
+# ─────────────────────────────────────────
+#  Bot + Dispatcher
 # ─────────────────────────────────────────
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
-dp  = Dispatcher(storage=MemoryStorage())   # ← MemoryStorage нужен для FSM в game.py
+dp  = Dispatcher(storage=MemoryStorage())
 
 dp.include_router(mine_router)
 dp.include_router(referral_router)
@@ -176,6 +187,12 @@ def back_main_keyboard() -> InlineKeyboardMarkup:
 def back_profile_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[[
         InlineKeyboardButton(text="Назад", callback_data="profile", icon_custom_emoji_id=EMOJI_BACK)
+    ]])
+
+
+def cancel_promo_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="Отмена", callback_data="cancel_promo", icon_custom_emoji_id=EMOJI_BACK)
     ]])
 
 
@@ -230,6 +247,14 @@ ABOUT_TEXT = (
     f'</blockquote>\n\n'
     f'<blockquote>'
     f'<b><tg-emoji emoji-id="5397916757333654639">🛡</tg-emoji>Присоединяйся к сообществу, следи за новостями и обращайся в поддержку!</b>'
+    f'</blockquote>'
+)
+
+PROMO_INPUT_TEXT = (
+    f'<tg-emoji emoji-id="{EMOJI_PROMO}">🎟</tg-emoji> <b>Промокоды</b>\n\n'
+    f'<blockquote>'
+    f'Введите промокод в чат и получите награду в Px!\n\n'
+    f'🔤 Регистр не важен — код принимается в любом виде.'
     f'</blockquote>'
 )
 
@@ -299,20 +324,21 @@ def build_stats_text(user: dict) -> str:
 
 # ─────────────────────────────────────────
 #  Разделы в разработке
-#  (games убран — он теперь живой)
 # ─────────────────────────────────────────
 DEV_SECTIONS = {
-    "leaders":    "Лидеры",
-    "exchange":   "Биржа",
-    "promocodes": "Промокоды",
+    "leaders":  "Лидеры",
+    "exchange": "Биржа",
 }
 
 
 # ─────────────────────────────────────────
-#  Хэндлеры
+#  Хэндлеры — основные
 # ─────────────────────────────────────────
 @dp.message(CommandStart())
-async def cmd_start(message: Message, command: CommandObject):
+async def cmd_start(message: Message, command: CommandObject, state: FSMContext):
+    # Если пользователь был в FSM промокодов — сбрасываем
+    await state.clear()
+
     uid    = message.from_user.id
     is_new = db_get_user(uid) is None
 
@@ -346,9 +372,10 @@ async def cmd_start(message: Message, command: CommandObject):
 
 
 @dp.callback_query(F.data == "main_menu")
-async def cb_main_menu(call: CallbackQuery):
+async def cb_main_menu(call: CallbackQuery, state: FSMContext):
     if not is_owner(call.message.message_id, call.from_user.id):
         await call.answer("🚫 Это не ваша кнопка!", show_alert=True); return
+    await state.clear()
     await call.message.edit_text(MAIN_TEXT, reply_markup=main_menu_keyboard())
     set_owner(call.message.message_id, call.from_user.id)
     await call.answer()
@@ -399,6 +426,164 @@ async def cb_dev_section(call: CallbackQuery):
     await call.message.edit_text(dev_text(DEV_SECTIONS[call.data]), reply_markup=back_main_keyboard())
     set_owner(call.message.message_id, call.from_user.id)
     await call.answer()
+
+
+# ─────────────────────────────────────────
+#  Промокоды — хэндлеры
+# ─────────────────────────────────────────
+@dp.callback_query(F.data == "promocodes")
+async def cb_promocodes(call: CallbackQuery, state: FSMContext):
+    if not is_owner(call.message.message_id, call.from_user.id):
+        await call.answer("🚫 Это не ваша кнопка!", show_alert=True); return
+
+    await state.set_state(PromoStates.waiting_for_code)
+    # Сохраняем message_id чтобы потом удалить или отредактировать
+    await state.update_data(promo_msg_id=call.message.message_id)
+
+    await call.message.edit_text(PROMO_INPUT_TEXT, reply_markup=cancel_promo_keyboard())
+    set_owner(call.message.message_id, call.from_user.id)
+    await call.answer()
+
+
+@dp.callback_query(F.data == "cancel_promo")
+async def cb_cancel_promo(call: CallbackQuery, state: FSMContext):
+    if not is_owner(call.message.message_id, call.from_user.id):
+        await call.answer("🚫 Это не ваша кнопка!", show_alert=True); return
+    await state.clear()
+    await call.message.edit_text(MAIN_TEXT, reply_markup=main_menu_keyboard())
+    set_owner(call.message.message_id, call.from_user.id)
+    await call.answer()
+
+
+@dp.message(PromoStates.waiting_for_code)
+async def handle_promo_input(message: Message, state: FSMContext):
+    uid  = message.from_user.id
+    code = message.text.strip() if message.text else ""
+
+    # Удаляем сообщение пользователя сразу
+    try:
+        await message.delete()
+    except Exception:
+        pass
+
+    data       = await state.get_data()
+    promo_msg_id = data.get("promo_msg_id")
+
+    if not code:
+        return
+
+    result = db_use_promo(uid, code)
+
+    if result["ok"]:
+        reward = result["reward"]
+        text = (
+            f'<tg-emoji emoji-id="{EMOJI_PROMO}">🎟</tg-emoji> <b>Промокод активирован!</b>\n\n'
+            f'<blockquote>'
+            f'✅  Промокод <code>{code.upper()}</code> успешно применён.\n'
+            f'<tg-emoji emoji-id="{EMOJI_GOLD}">⚡</tg-emoji>  Начислено: <b>{reward:,.2f} Px</b>'
+            f'</blockquote>'
+        )
+    else:
+        reason = result["reason"]
+        if reason == "not_found":
+            detail = "Такой промокод не существует."
+        elif reason == "expired":
+            detail = "Промокод уже использован максимальное количество раз."
+        elif reason == "already_used":
+            detail = "Вы уже активировали этот промокод."
+        else:
+            detail = "Неизвестная ошибка."
+
+        text = (
+            f'<tg-emoji emoji-id="{EMOJI_PROMO}">🎟</tg-emoji> <b>Промокоды</b>\n\n'
+            f'<blockquote>'
+            f'❌  <b>Не удалось активировать промокод.</b>\n'
+            f'{detail}\n\n'
+            f'🔤 Попробуйте ввести другой промокод.'
+            f'</blockquote>'
+        )
+
+    await state.clear()
+
+    # Редактируем исходное меню-сообщение с результатом
+    if promo_msg_id:
+        try:
+            await bot.edit_message_text(
+                chat_id=uid,
+                message_id=promo_msg_id,
+                text=text,
+                reply_markup=back_main_keyboard(),
+                parse_mode=ParseMode.HTML,
+            )
+            set_owner(promo_msg_id, uid)
+            return
+        except Exception:
+            pass
+
+    # Fallback: отправить новым сообщением
+    sent = await message.answer(text, reply_markup=back_main_keyboard())
+    set_owner(sent.message_id, uid)
+
+
+# ─────────────────────────────────────────
+#  Промокоды — команда админа
+# ─────────────────────────────────────────
+@dp.message(Command("addpromo"))
+async def cmd_addpromo(message: Message):
+    uid = message.from_user.id
+
+    if uid not in ADMIN_IDS:
+        await message.answer("🚫 У вас нет доступа к этой команде.")
+        return
+
+    # Ожидаем: /addpromo КОД СУММА АКТИВАЦИИ
+    args = message.text.split(maxsplit=3)[1:]  # убираем /addpromo
+
+    if len(args) != 3:
+        await message.answer(
+            f'<tg-emoji emoji-id="{EMOJI_PROMO}">🎟</tg-emoji> <b>Неверный формат.</b>\n\n'
+            f'<blockquote>Использование:\n'
+            f'<code>/addpromo КОД СУММА АКТИВАЦИИ</code>\n\n'
+            f'Пример:\n'
+            f'<code>/addpromo SUMMER2025 500 100</code></blockquote>'
+        )
+        return
+
+    code_raw, amount_raw, uses_raw = args
+    code = code_raw.strip().upper()
+
+    try:
+        reward = float(amount_raw.replace(",", "."))
+        if reward <= 0:
+            raise ValueError
+    except ValueError:
+        await message.answer("❌ Сумма должна быть положительным числом.")
+        return
+
+    try:
+        max_uses = int(uses_raw)
+        if max_uses <= 0:
+            raise ValueError
+    except ValueError:
+        await message.answer("❌ Количество активаций должно быть целым положительным числом.")
+        return
+
+    created = db_create_promo(code, reward, max_uses)
+
+    if created:
+        await message.answer(
+            f'<tg-emoji emoji-id="{EMOJI_PROMO}">🎟</tg-emoji> <b>Промокод создан!</b>\n\n'
+            f'<blockquote>'
+            f'🔑  Код: <code>{code}</code>\n'
+            f'<tg-emoji emoji-id="{EMOJI_GOLD}">⚡</tg-emoji>  Награда: <b>{reward:,.2f} Px</b>\n'
+            f'🔢  Активаций: <b>{max_uses}</b>'
+            f'</blockquote>'
+        )
+    else:
+        await message.answer(
+            f'❌ Промокод <code>{code}</code> уже существует.\n'
+            f'Выберите другой код.'
+        )
 
 
 # ─────────────────────────────────────────
