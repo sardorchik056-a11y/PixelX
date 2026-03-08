@@ -273,7 +273,7 @@ def game_text(session: dict) -> str:
     return (
         f"<blockquote><b>💣 Мины</b></blockquote>\n\n"
         f"<blockquote>"
-        f"<tg-emoji emoji-id="5199552030615558774">👋</tg-emoji>Ставка: <code>{bet}</code> Px\n"
+        f'<tg-emoji emoji-id="5199552030615558774">👋</tg-emoji>Ставка: <code>{bet}</code> Px\n'
         f"💣 Мин: <b>{mines}</b> | 💎: <b>{total_safe}</b>\n"
         f'<tg-emoji emoji-id="5427168083074628963">👋</tg-emoji>Открыто: <b>{gems}</b>\n'
         f'<tg-emoji emoji-id="5397782960512444700">👋</tg-emoji>Текущий: <b><code>x{mult}</code></b>\n'
