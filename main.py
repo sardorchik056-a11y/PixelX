@@ -466,12 +466,9 @@ def build_leaders_text() -> str:
             f'<tg-emoji emoji-id="{emoji_id}">⭐</tg-emoji>  '
             f'{uname} — <b>{px:,.2f} Px</b>'
         )
-    body = "
-".join(lines) if lines else "Пока нет данных."
+    body = "\n".join(lines) if lines else "Пока нет данных."
     return (
-        f'<tg-emoji emoji-id="{EMOJI_LEADERS}">🏆</tg-emoji> <b>Таблица лидеров</b>
-
-'
+        f'<tg-emoji emoji-id="{EMOJI_LEADERS}">🏆</tg-emoji> <b>Таблица лидеров</b>\n\n'
         f'<blockquote>{body}</blockquote>'
     )
 
