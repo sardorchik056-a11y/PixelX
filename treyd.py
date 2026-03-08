@@ -84,6 +84,9 @@ EMOJI_STATS    = "5231200819986047254"
 EMOJI_SELL     = "5429651785352501917"
 EMOJI_BUY      = "5206607081334906820"
 EMOJI_WITHDRAW = "5443127283898405358"
+EMOJI_BUY = "5449683594425410231"
+EMOJI_SELL = "5447183459602669338"
+EMOJI_VIV = "5445355530111437729"
 
 # ── Инжектируемые зависимости ───────────────────────────────
 is_owner_fn  = lambda mid, uid: True
@@ -211,12 +214,12 @@ async def _edit_or_send(
 def _kb_exchange_main() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text="💸 Купить",     callback_data="ex_buy_0_-1"),
-            InlineKeyboardButton(text="📤 Продать",    callback_data="ex_sell_start"),
+            InlineKeyboardButton(text="Купить",     callback_data="ex_buy_0_-1", icon_custom_emoji_id=EMOJI_BUY),
+            InlineKeyboardButton(text="Продать",    callback_data="ex_sell_start", icon_custom_emoji_id=EMOJI_SELL),
         ],
         [
-            InlineKeyboardButton(text="🏦 Вывод",      callback_data="ex_withdraw"),
-            InlineKeyboardButton(text="📊 Статистика", callback_data="ex_stats"),
+            InlineKeyboardButton(text="Вывод",      callback_data="ex_withdraw", icon_custom_emoji_id=EMOJI_VIV),
+            InlineKeyboardButton(text="Статистика", callback_data="ex_stats", icon_custom_emoji_id=EMOJI_STATS),
         ],
         [
             InlineKeyboardButton(
