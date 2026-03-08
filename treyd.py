@@ -1274,8 +1274,8 @@ async def cb_ex_stats(call: CallbackQuery, state: FSMContext):
         f'<blockquote>'
         f'<tg-emoji emoji-id="5231200819986047254">💱</tg-emoji>  Выводов всего: <b>{wstats["count"]}</b>\n'
         f'<tg-emoji emoji-id="5445355530111437729">💱</tg-emoji>  Выведено всего: <b>${wstats["total"]:.2f}</b>'
-        f'</blockquote>\n',
-        f'<b><i>Статистика обновляется в реальном времени!</i></b>'
+        f'</blockquote>\n'
+        f'<b><i>Статистика обновляется в реальном времени!</i></b>',
         reply_markup=_kb_stats(),
     )
     set_owner_fn(call.message.message_id, uid)
