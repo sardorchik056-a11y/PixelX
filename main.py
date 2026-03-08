@@ -1,5 +1,6 @@
 import asyncio
 import os
+import time
 from datetime import datetime
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
@@ -62,6 +63,16 @@ if not BOT_TOKEN:
 ADMIN_IDS: list[int] = [
     8476835256, 8118184388,
 ]
+
+# ─────────────────────────────────────────
+#  Лимиты перевода
+# ─────────────────────────────────────────
+TRANSFER_MIN        = 1
+TRANSFER_MAX        = 100_000_000
+TRANSFER_COOLDOWN   = 10          # секунд между переводами
+
+# uid -> timestamp последнего перевода
+_transfer_cooldowns: dict[int, float] = {}
 
 # ─────────────────────────────────────────
 #  Emoji IDs
@@ -151,7 +162,7 @@ dp.include_router(tower_router)
 dp.include_router(mines_router)
 dp.include_router(gold_router)
 
-# ── Роутер с низким приоритетом (баланс, промо-текст) — подключится ПОСЛЕДНИМ в конце файла ──
+# ── Роутер с низким приоритетом (баланс) — подключится ПОСЛЕДНИМ в конце файла ──
 low_priority_router = Router()
 
 
@@ -565,11 +576,14 @@ async def cmd_promo_text(message: Message):
 
 # ─────────────────────────────────────────
 #  Перевод Px — /pay /gift /дать
+#  Мин: 1 Px  |  Макс: 100 000 000 Px
+#  Кулдаун: 10 секунд между переводами
 # ─────────────────────────────────────────
 async def _handle_transfer(message: Message, amount_str: str):
     sender = message.from_user
     uid    = sender.id
 
+    # Нужен reply на чьё-то сообщение
     if not message.reply_to_message:
         await message.reply(
             f'<tg-emoji emoji-id="5334544901428229844">⚡</tg-emoji> <b>Как сделать перевод?</b>\n\n'
@@ -580,26 +594,57 @@ async def _handle_transfer(message: Message, amount_str: str):
 
     target_user = message.reply_to_message.from_user
 
+    # Нельзя себе и ботам
     if target_user.id == uid:
         return
     if target_user.is_bot:
         return
 
+    # Парсим сумму
     amount_str = amount_str.strip().replace(",", ".")
     try:
         amount = float(amount_str)
     except ValueError:
         return
 
-    if amount <= 0:
+    # Проверка лимитов суммы
+    if amount < TRANSFER_MIN:
+        await message.reply(
+            f'<tg-emoji emoji-id="5287231198098117669">⚡</tg-emoji> '
+            f'<b>Минимальная сумма перевода — {TRANSFER_MIN:,} Px!</b>'
+        )
+        return
+
+    if amount > TRANSFER_MAX:
+        await message.reply(
+            f'<tg-emoji emoji-id="5287231198098117669">⚡</tg-emoji> '
+            f'<b>Максимальная сумма перевода — {TRANSFER_MAX:,} Px!</b>'
+        )
+        return
+
+    # Проверка кулдауна
+    now       = time.monotonic()
+    last_time = _transfer_cooldowns.get(uid, 0)
+    elapsed   = now - last_time
+
+    if elapsed < TRANSFER_COOLDOWN:
+        wait = int(TRANSFER_COOLDOWN - elapsed) + 1
+        await message.reply(
+            f'<tg-emoji emoji-id="5287231198098117669">⚡</tg-emoji> '
+            f'<b>Подождите ещё {wait} сек. перед следующим переводом!</b>'
+        )
         return
 
     db_get_or_create_user(sender)
     db_get_or_create_user(target_user)
 
+    # Атомарное списание — если денег не хватает, игнорируем
     success = db_try_spend_px(uid, amount)
     if not success:
-        return  # недостаточно средств — тихо игнорируем
+        return
+
+    # Обновляем кулдаун только после успешного перевода
+    _transfer_cooldowns[uid] = now
 
     db_add_px(target_user.id, amount)
 
@@ -692,8 +737,7 @@ async def cmd_addpromo(message: Message):
 
 
 # ─────────────────────────────────────────
-#  Баланс — регистрируется в low_priority_router
-#  ПОСЛЕДНИМ чтобы не перехватывать команды других модулей
+#  Баланс — регистрируется в low_priority_router ПОСЛЕДНИМ
 # ─────────────────────────────────────────
 _BALANCE_WORDS = {
     "б", "b",
