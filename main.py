@@ -304,8 +304,6 @@ def profile_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(text="Статистика", callback_data="stats", icon_custom_emoji_id=EMOJI_STATS),
-        ],
-        [
             InlineKeyboardButton(text="Назад", callback_data="main_menu", icon_custom_emoji_id=EMOJI_BACK),
         ],
     ])
