@@ -276,7 +276,7 @@ def game_text(session: dict) -> str:
         f"<blockquote><b>🏰 Башня</b></blockquote>\n\n"
         f"<blockquote>"
         f'<tg-emoji emoji-id="5199552030615558774">👋</tg-emoji>Ставка: <code>{bet}</code> Px\n'
-        f"{DIFFICULTY_EMOJI[diff]} Сложность: <b>{DIFFICULTY_NAMES[diff]}</b> ({num_bombs} 💣 из {CELLS})\n"
+        f"{DIFFICULTY_EMOJI[diff]} Сложность: <b>{DIFFICULTY_NAMES[diff]}</b>\n"
         f'<tg-emoji emoji-id="5415655814079723871">👋</tg-emoji>Этаж: <b>{floor_num}/{FLOORS}</b>\n'
         f'<tg-emoji emoji-id="5391032818111363540">👋</tg-emoji>Текущий: <b><code>x{mult}</code></b>\n'
         f'<tg-emoji emoji-id="5416117059207572332">👋</tg-emoji>Следующий: <b><code>x{next_mult}</code></b>\n'
