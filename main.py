@@ -425,9 +425,55 @@ def build_stats_text(user: dict) -> str:
 # ─────────────────────────────────────────
 #  Разделы в разработке
 # ─────────────────────────────────────────
-DEV_SECTIONS = {
-    "leaders": "Лидеры",
-}
+DEV_SECTIONS: dict = {}
+
+
+# ─────────────────────────────────────────
+#  Топ-10 по балансу
+# ─────────────────────────────────────────
+EMOJI_LEADERS_PLACE = [
+    "ЗАМЕНИТЕ_НА_ID_1",   # 1 место
+    "ЗАМЕНИТЕ_НА_ID_2",   # 2 место
+    "ЗАМЕНИТЕ_НА_ID_3",   # 3 место
+    "ЗАМЕНИТЕ_НА_ID_4",   # 4 место
+    "ЗАМЕНИТЕ_НА_ID_5",   # 5 место
+    "ЗАМЕНИТЕ_НА_ID_6",   # 6 место
+    "ЗАМЕНИТЕ_НА_ID_7",   # 7 место
+    "ЗАМЕНИТЕ_НА_ID_8",   # 8 место
+    "ЗАМЕНИТЕ_НА_ID_9",   # 9 место
+    "ЗАМЕНИТЕ_НА_ID_10",  # 10 место
+]
+
+
+def db_get_top10_by_balance() -> list[dict]:
+    from database import get_conn
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT id, first_name, last_name, username, px FROM users ORDER BY px DESC LIMIT 10"
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def build_leaders_text() -> str:
+    top = db_get_top10_by_balance()
+    lines = []
+    for i, user in enumerate(top):
+        emoji_id = EMOJI_LEADERS_PLACE[i]
+        name = f"{user['first_name']} {user.get('last_name') or ''}".strip() or "—"
+        uname = f"@{user['username']}" if user.get("username") else name
+        px = user["px"]
+        lines.append(
+            f'<tg-emoji emoji-id="{emoji_id}">⭐</tg-emoji>  '
+            f'{uname} — <b>{px:,.2f} Px</b>'
+        )
+    body = "
+".join(lines) if lines else "Пока нет данных."
+    return (
+        f'<tg-emoji emoji-id="{EMOJI_LEADERS}">🏆</tg-emoji> <b>Таблица лидеров</b>
+
+'
+        f'<blockquote>{body}</blockquote>'
+    )
 
 
 # ─────────────────────────────────────────
@@ -561,13 +607,14 @@ async def cb_about(call: CallbackQuery):
 
 
 # ─────────────────────────────────────────
-#  Разделы в разработке
+#  Лидеры — топ-10 по балансу
 # ─────────────────────────────────────────
-@dp.callback_query(F.data.in_(DEV_SECTIONS.keys()))
-async def cb_dev_section(call: CallbackQuery):
+@dp.callback_query(F.data == "leaders")
+async def cb_leaders(call: CallbackQuery):
     if not is_owner(call.message.message_id, call.from_user.id):
         await call.answer("🚫 Это не ваша кнопка!", show_alert=True); return
-    await call.message.edit_text(dev_text(DEV_SECTIONS[call.data]), reply_markup=back_main_keyboard())
+    text = build_leaders_text()
+    await call.message.edit_text(text, reply_markup=back_main_keyboard())
     set_owner(call.message.message_id, call.from_user.id)
     await call.answer()
 
