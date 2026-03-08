@@ -450,7 +450,7 @@ def games_keyboard() -> InlineKeyboardMarkup:
 GAMES_TEXT = (
     '<b><tg-emoji emoji-id="5424972470023104089">👋</tg-emoji> Игры</b>\n\n'
     '<blockquote><b><tg-emoji emoji-id="5197269100878907942">👋</tg-emoji>Текстовые команды:</b>\n'
-    '  <tg-emoji emoji-id="5195033767969839232">👋</tg-emoji>Эмоджи игры'
+    '  <tg-emoji emoji-id="5195033767969839232">👋</tg-emoji>Эмоджи игры:\n'
     "  <code>куб (исход) (сумма)</code>\n"
     "  <code>баскет (исход) (сумма)</code>\n"
     "  <code>фут (исход) (сумма)</code>\n"
@@ -458,7 +458,7 @@ GAMES_TEXT = (
     "  <code>боулинг (исход) (сумма)</code>\n"
     "</blockquote>"
     "<blockquote>"
-    '  <tg-emoji emoji-id="5197288647275071607">👋</tg-emoji>Мины игры'
+    '  <tg-emoji emoji-id="5197288647275071607">👋</tg-emoji>Мины игры:\n'
     "  <code>мины (сумма) (сложность)</code>\n"
     "  <code>башня (сумма) (сложность)</code>\n"
     "  <code>золото (сумма)</code>\n"
