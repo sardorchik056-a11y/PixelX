@@ -721,7 +721,7 @@ async def cmd_balance_text(message: Message):
         return
 
     await message.reply(
-        f'<tg-emoji emoji-id="{EMOJI_GOLD}">⚡</tg-emoji><b>Баланс:</b> <code>{user["px"]:,.2f} Px</code>\n\n'
+        f'<blockquote><tg-emoji emoji-id="{EMOJI_GOLD}">⚡</tg-emoji><b>Баланс:</b> <code>{user["px"]:,.2f} Px</code></blockquote>\n\n'
         f'<blockquote>'
         f'<tg-emoji emoji-id="5429651785352501917">⚡</tg-emoji>  <b>Выиграно всего:</b> <code>{user["total_won"]:,.2f} Px</code>\n'
         f'<tg-emoji emoji-id="5429518319243775957">⚡</tg-emoji>  <b>Проиграно всего:</b> <code>{user["total_lost"]:,.2f} Px</code>'
