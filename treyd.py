@@ -1,14 +1,12 @@
 """
 treyd.py — Модуль «Биржа» для PixelX бота
 
-Изменения v2:
-  • Цена указывается за ВСЕЙ лот (не за 10к), диапазон пропорционален объёму
-  • Статистика → кнопка «Мои лоты» → список активных лотов с отменой (штраф 5%)
-  • Вывод → заявка, ждёт одобрения админа
-  • /check <id|@username> — последние 5 продаж пользователя
-  • /checkw — все pending-заявки на вывод
-  • /take #id — одобрить заявку на вывод
-  • /reject #id — отклонить заявку
+Изменения v3:
+  • Цена в списке лотов — за ВЕСЬ лот (не за 10к)
+  • Кнопка выбора диапазона Px при просмотре лотов
+  • Лимит 5 активных лотов на одного пользователя
+  • Статистика покупок (кол-во, потрачено $, получено Px)
+  • Защита от дублей через SELECT FOR UPDATE (атомарная блокировка)
 """
 
 import asyncio
@@ -39,6 +37,9 @@ from treyd_db import (
     db_create_withdraw_request, db_get_withdraw_request,
     db_get_pending_withdraw_requests, db_approve_withdraw_request,
     db_reject_withdraw_request, db_get_withdraw_stats,
+    db_count_active_listings_by_seller,
+    db_get_buyer_stats,
+    db_mark_listing_sold_atomic,
 )
 
 logger = logging.getLogger(__name__)
@@ -49,22 +50,29 @@ CRYPTOBOT_API_URL   = "https://pay.crypt.bot/api"
 
 SELL_MIN_PX          = 50_000
 SELL_MAX_PX          = 1_000_000_000
+MAX_ACTIVE_LOTS      = 5   # лимит активных лотов на одного продавца
 
-# Цена за ВЕСЬ лот: 10 000 Px = $0.20 базово, каждые следующие 10к тоже по 0.20 минимум
-# Максимум: 1$ за 10 000 Px
-# Итого диапазон для N Px: [$0.20 * N/10000 ; $1.00 * N/10000]
 PRICE_PER_10K_MIN    = 0.20
 PRICE_PER_10K_MAX    = 1.00
 
-COMMISSION_SELL      = 0.15   # 15% при продаже
-COMMISSION_CANCEL    = 0.05   # 5% при отмене лота владельцем
-COMMISSION_WITHDRAW  = 0.03   # 3% при выводе (отображается, реально берём при одобрении)
+COMMISSION_SELL      = 0.15
+COMMISSION_CANCEL    = 0.05
+COMMISSION_WITHDRAW  = 0.03
 WITHDRAW_MIN_USD     = 1.00
 
 EXPIRE_DAYS_OPTIONS  = [7, 14, 30]
 LISTINGS_PER_PAGE    = 10
 INVOICE_POLL_SECS    = 2
 INVOICE_MAX_SECS     = 600
+
+# Диапазоны фильтра Px (кнопки выбора диапазона)
+PX_RANGES = [
+    ("Любое",         0,           10_000_000_000),
+    ("50к–200к",      50_000,      200_000),
+    ("200к–500к",     200_000,     500_000),
+    ("500к–1М",       500_000,     1_000_000),
+    ("1М+",           1_000_000,   10_000_000_000),
+]
 
 # ── Emoji ───────────────────────────────────────────────────
 EMOJI_EXCHANGE = "5402186569006210455"
@@ -76,12 +84,13 @@ EMOJI_STATS    = "5231200819986047254"
 EMOJI_SELL     = "5429651785352501917"
 EMOJI_BUY      = "5206607081334906820"
 EMOJI_WITHDRAW = "5443127283898405358"
+EMOJI_FILTER   = "5373017478466479017"
 
 # ── Инжектируемые зависимости ───────────────────────────────
 is_owner_fn  = lambda mid, uid: True
 set_owner_fn = lambda mid, uid: None
 _bot_ref: Optional[Bot] = None
-ADMIN_IDS: list[int] = []   # заполняется из main.py через set_admin_ids()
+ADMIN_IDS: list[int] = []
 
 
 def set_bot_ref(b: Bot):
@@ -105,6 +114,10 @@ class SellStates(StatesGroup):
 class WithdrawStates(StatesGroup):
     waiting_amount = State()
     confirm        = State()
+
+
+class FilterStates(StatesGroup):
+    waiting_px = State()
 
 
 # ── Router ──────────────────────────────────────────────────
@@ -159,18 +172,14 @@ async def _create_withdraw_check(amount_usd: float) -> str:
 
 # ── Хелперы ─────────────────────────────────────────────────
 def _lot_price_range(amount_px: float) -> tuple[float, float]:
-    """
-    Диапазон итоговой цены лота (пользователь вводит одно число).
-    Минимум: $0.20 (фикс, независимо от объёма)
-    Максимум: $0.20 * (amount_px / 10_000)
-    Примеры:
-      70 000 Px  → $0.20 до $1.40
-      140 000 Px → $0.20 до $2.80
-      50 000 Px  → $0.20 до $1.00
-    """
     p_max = round(PRICE_PER_10K_MIN * (amount_px / 10_000), 2)
-    p_max = max(p_max, PRICE_PER_10K_MIN)  # минимум хотя бы 0.20
+    p_max = max(p_max, PRICE_PER_10K_MIN)
     return PRICE_PER_10K_MIN, p_max
+
+
+def _lot_total_price(lot: dict) -> float:
+    """Итоговая цена лота = price_per_10k * px_amount / 10000."""
+    return round(lot["price_per_10k"] * (lot["px_amount"] / 10_000), 2)
 
 
 def _seller_earn(lot_price: float) -> float:
@@ -203,7 +212,7 @@ async def _edit_or_send(
 def _kb_exchange_main() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text="💸 Купить",     callback_data="ex_buy_0"),
+            InlineKeyboardButton(text="💸 Купить",     callback_data="ex_buy_0_0"),
             InlineKeyboardButton(text="📤 Продать",    callback_data="ex_sell_start"),
         ],
         [
@@ -259,33 +268,64 @@ def _kb_confirm_sell() -> InlineKeyboardMarkup:
     ])
 
 
-def _kb_listings(listings: list, page: int, total_pages: int) -> InlineKeyboardMarkup:
+def _kb_px_range_filter(current_range: int) -> InlineKeyboardMarkup:
+    """Кнопки выбора диапазона Px."""
+    rows = []
+    row = []
+    for i, (label, _, _) in enumerate(PX_RANGES):
+        mark = "✅ " if i == current_range else ""
+        row.append(InlineKeyboardButton(
+            text=f"{mark}{label}",
+            # ex_range_{i} применяет фильтр и сразу показывает лоты
+            callback_data=f"ex_range_{i}"
+        ))
+        if len(row) == 3:
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
+    # Назад → список лотов с текущим диапазоном (без смены фильтра)
+    rows.append([InlineKeyboardButton(
+        text="Назад", callback_data=f"ex_buy_0_{current_range}",
+        icon_custom_emoji_id=EMOJI_BACK
+    )])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def _kb_listings(listings: list, page: int, total_pages: int, range_idx: int) -> InlineKeyboardMarkup:
     rows = []
     for lot in listings:
-        p_min, p_max = _lot_price_range(lot["px_amount"])
-        label = f'{int(lot["px_amount"]):,} Px → ${lot["price_per_10k"]:.2f}'
+        lot_price = _lot_total_price(lot)
+        # Показываем цену за весь лот
+        label = f'{int(lot["px_amount"]):,} Px → ${lot_price:.2f}'
         rows.append([InlineKeyboardButton(
-            text=label, callback_data=f'ex_lot_{lot["id"]}'
+            text=label, callback_data=f'ex_lot_{lot["id"]}_{range_idx}'
         )])
     nav = []
     if page > 0:
-        nav.append(InlineKeyboardButton(text="◀️", callback_data=f"ex_buy_{page - 1}"))
+        nav.append(InlineKeyboardButton(text="◀️", callback_data=f"ex_buy_{page - 1}_{range_idx}"))
     if page < total_pages - 1:
-        nav.append(InlineKeyboardButton(text="▶️", callback_data=f"ex_buy_{page + 1}"))
+        nav.append(InlineKeyboardButton(text="▶️", callback_data=f"ex_buy_{page + 1}_{range_idx}"))
     if nav:
         rows.append(nav)
+    # Кнопка фильтра диапазона
+    range_label = PX_RANGES[range_idx][0]
+    rows.append([InlineKeyboardButton(
+        text=f"🔍 Диапазон: {range_label}",
+        callback_data=f"ex_filter_{range_idx}"
+    )])
     rows.append([InlineKeyboardButton(
         text="Назад", callback_data="exchange", icon_custom_emoji_id=EMOJI_BACK
     )])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def _kb_lot_detail(lot_id: int) -> InlineKeyboardMarkup:
+def _kb_lot_detail(lot_id: int, range_idx: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(text="✅ Купить", callback_data=f"ex_buy_lot_{lot_id}"),
             InlineKeyboardButton(
-                text="Назад", callback_data="ex_buy_0", icon_custom_emoji_id=EMOJI_BACK
+                text="Назад", callback_data=f"ex_buy_0_{range_idx}", icon_custom_emoji_id=EMOJI_BACK
             ),
         ],
     ])
@@ -320,7 +360,8 @@ def _kb_stats() -> InlineKeyboardMarkup:
 def _kb_my_lots(lots: list, page: int, total_pages: int) -> InlineKeyboardMarkup:
     rows = []
     for lot in lots:
-        label = f'#{lot["id"]} · {int(lot["px_amount"]):,} Px · ${lot["price_per_10k"]:.2f}'
+        lot_price = _lot_total_price(lot)
+        label = f'#{lot["id"]} · {int(lot["px_amount"]):,} Px · ${lot_price:.2f}'
         rows.append([InlineKeyboardButton(
             text=label, callback_data=f'ex_my_lot_{lot["id"]}'
         )])
@@ -368,7 +409,8 @@ def _text_main(uid: int) -> str:
         f'</blockquote>\n\n'
         f'<blockquote>'
         f'Продавайте Px за $, покупайте лоты других игроков.\n'
-        f'Комиссия: <b>15%</b> от продажи · <b>3%</b> при выводе · <b>5%</b> при отмене лота'
+        f'Комиссия: <b>15%</b> от продажи · <b>3%</b> при выводе · <b>5%</b> при отмене лота\n'
+        f'Лимит: <b>{MAX_ACTIVE_LOTS}</b> активных лота на продавца'
         f'</blockquote>'
     )
 
@@ -397,6 +439,17 @@ async def cb_sell_start(call: CallbackQuery, state: FSMContext):
     if not is_owner_fn(call.message.message_id, call.from_user.id):
         await call.answer("🚫 Это не ваша кнопка!", show_alert=True)
         return
+
+    uid = call.from_user.id
+    active_count = db_count_active_listings_by_seller(uid)
+    if active_count >= MAX_ACTIVE_LOTS:
+        await call.answer(
+            f"❌ Лимит: максимум {MAX_ACTIVE_LOTS} активных лотов!\n"
+            f"У вас сейчас: {active_count}",
+            show_alert=True
+        )
+        return
+
     await state.set_state(SellStates.waiting_amount)
     await state.update_data(sell_msg_id=call.message.message_id)
     await call.message.edit_text(
@@ -404,7 +457,8 @@ async def cb_sell_start(call: CallbackQuery, state: FSMContext):
         f'<blockquote>'
         f'Введите количество Px для продажи:\n\n'
         f'Минимум: <b>{SELL_MIN_PX:,} Px</b>\n'
-        f'Максимум: <b>{SELL_MAX_PX:,} Px</b>'
+        f'Максимум: <b>{SELL_MAX_PX:,} Px</b>\n\n'
+        f'Активных лотов у вас: <b>{active_count} / {MAX_ACTIVE_LOTS}</b>'
         f'</blockquote>',
         reply_markup=_kb_cancel_sell(),
     )
@@ -451,6 +505,17 @@ async def handle_sell_amount(message: Message, state: FSMContext):
             f'<tg-emoji emoji-id="{EMOJI_WARN}">⚠️</tg-emoji> '
             f'<b>Недостаточно Px на балансе!</b>\n\nВведите другое количество:'
         )
+        return
+
+    # Повторная проверка лимита лотов
+    active_count = db_count_active_listings_by_seller(uid)
+    if active_count >= MAX_ACTIVE_LOTS:
+        await _err(
+            f'<tg-emoji emoji-id="{EMOJI_WARN}">⚠️</tg-emoji> '
+            f'<b>Лимит активных лотов ({MAX_ACTIVE_LOTS}) достигнут!</b>\n'
+            f'Дождитесь продажи или отмените существующий лот.'
+        )
+        await state.clear()
         return
 
     p_min, p_max = _lot_price_range(amount)
@@ -585,6 +650,17 @@ async def cb_sell_confirm(call: CallbackQuery, state: FSMContext):
         await state.clear()
         return
 
+    # Финальная проверка лимита перед созданием
+    active_count = db_count_active_listings_by_seller(uid)
+    if active_count >= MAX_ACTIVE_LOTS:
+        await call.message.edit_text(
+            f'<tg-emoji emoji-id="{EMOJI_WARN}">⚠️</tg-emoji> '
+            f'<b>Лимит активных лотов ({MAX_ACTIVE_LOTS}) достигнут!</b>',
+            reply_markup=_kb_back_exchange(),
+        )
+        await state.clear()
+        return
+
     if not db_try_spend_px(uid, amount):
         await call.message.edit_text(
             f'<tg-emoji emoji-id="{EMOJI_WARN}">⚠️</tg-emoji> '
@@ -617,20 +693,44 @@ async def cb_sell_confirm(call: CallbackQuery, state: FSMContext):
 
 
 # ════════════════════════════════════════════════════════════
-#  ПОКУПКА — список лотов
+#  ПОКУПКА — фильтр диапазона
 # ════════════════════════════════════════════════════════════
-@exchange_router.callback_query(
-    F.data.startswith("ex_buy_") & ~F.data.startswith("ex_buy_lot_")
-)
-async def cb_buy_list(call: CallbackQuery, state: FSMContext):
+@exchange_router.callback_query(F.data.startswith("ex_filter_"))
+async def cb_filter_range(call: CallbackQuery, state: FSMContext):
     if not is_owner_fn(call.message.message_id, call.from_user.id):
         await call.answer("🚫 Это не ваша кнопка!", show_alert=True)
         return
 
-    uid  = call.from_user.id
-    page = int(call.data.split("_")[-1])
+    current_range = int(call.data.split("_")[-1])
+    await call.message.edit_text(
+        f'<tg-emoji emoji-id="{EMOJI_FILTER}">🔍</tg-emoji> <b>Выберите диапазон Px</b>\n\n'
+        f'<blockquote>Фильтрует лоты по количеству Px в лоте:</blockquote>',
+        reply_markup=_kb_px_range_filter(current_range),
+    )
+    set_owner_fn(call.message.message_id, call.from_user.id)
+    await call.answer()
 
-    all_lots    = db_get_active_listings(exclude_uid=uid)
+
+@exchange_router.callback_query(F.data.startswith("ex_range_"))
+async def cb_select_range(call: CallbackQuery, state: FSMContext):
+    if not is_owner_fn(call.message.message_id, call.from_user.id):
+        await call.answer("🚫 Это не ваша кнопка!", show_alert=True)
+        return
+
+    range_idx = int(call.data.split("_")[-1])
+    uid = call.from_user.id
+    await _show_buy_list(call, uid, page=0, range_idx=range_idx)
+
+
+# ════════════════════════════════════════════════════════════
+#  ПОКУПКА — список лотов
+# ════════════════════════════════════════════════════════════
+async def _show_buy_list(call: CallbackQuery, uid: int, page: int, range_idx: int):
+    """Общий хелпер: рендерит список лотов с выбранным диапазоном и страницей."""
+    _, px_min, px_max = PX_RANGES[range_idx]
+    range_label = PX_RANGES[range_idx][0]
+
+    all_lots    = db_get_active_listings(exclude_uid=uid, px_min=px_min, px_max=px_max)
     total_pages = max(1, (len(all_lots) + LISTINGS_PER_PAGE - 1) // LISTINGS_PER_PAGE)
     page        = max(0, min(page, total_pages - 1))
     chunk       = all_lots[page * LISTINGS_PER_PAGE:(page + 1) * LISTINGS_PER_PAGE]
@@ -638,36 +738,68 @@ async def cb_buy_list(call: CallbackQuery, state: FSMContext):
     if not all_lots:
         text = (
             f'<tg-emoji emoji-id="{EMOJI_BUY}">💸</tg-emoji> <b>Покупка Px</b>\n\n'
-            f'<blockquote>Активных лотов пока нет. Загляните позже!</blockquote>'
+            f'<blockquote>'
+            f'Диапазон: <b>{range_label}</b>\n\n'
+            f'Активных лотов пока нет. Загляните позже!'
+            f'</blockquote>'
         )
-        await call.message.edit_text(text, reply_markup=_kb_back_exchange())
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(
+                text=f"🔍 Диапазон: {range_label}",
+                callback_data=f"ex_filter_{range_idx}"
+            )],
+            [InlineKeyboardButton(
+                text="Назад", callback_data="exchange", icon_custom_emoji_id=EMOJI_BACK
+            )],
+        ])
+        await call.message.edit_text(text, reply_markup=kb, parse_mode=ParseMode.HTML)
     else:
         text = (
             f'<tg-emoji emoji-id="{EMOJI_BUY}">💸</tg-emoji> <b>Покупка Px</b>\n\n'
             f'<blockquote>'
-            f'Лотов на бирже: <b>{len(all_lots)}</b>\n'
+            f'Диапазон: <b>{range_label}</b>\n'
+            f'Лотов: <b>{len(all_lots)}</b>\n'
             f'Страница: <b>{page + 1} / {total_pages}</b>\n\n'
             f'Нажмите на лот для подробностей:'
             f'</blockquote>'
         )
-        await call.message.edit_text(text, reply_markup=_kb_listings(chunk, page, total_pages))
+        await call.message.edit_text(
+            text,
+            reply_markup=_kb_listings(chunk, page, total_pages, range_idx),
+            parse_mode=ParseMode.HTML,
+        )
 
     set_owner_fn(call.message.message_id, uid)
     await call.answer()
 
 
+@exchange_router.callback_query(F.data.regexp(r'^ex_buy_\d+_\d+$'))
+async def cb_buy_list(call: CallbackQuery, state: FSMContext):
+    if not is_owner_fn(call.message.message_id, call.from_user.id):
+        await call.answer("🚫 Это не ваша кнопка!", show_alert=True)
+        return
+
+    uid   = call.from_user.id
+    parts = call.data.split("_")   # ['ex', 'buy', page, range_idx]
+    page      = int(parts[2])
+    range_idx = int(parts[3])
+    await _show_buy_list(call, uid, page, range_idx)
+
+
 # ════════════════════════════════════════════════════════════
 #  ПОКУПКА — детали лота
 # ════════════════════════════════════════════════════════════
-@exchange_router.callback_query(F.data.startswith("ex_lot_"))
+@exchange_router.callback_query(F.data.regexp(r'^ex_lot_\d+_\d+$'))
 async def cb_lot_detail(call: CallbackQuery, state: FSMContext):
     if not is_owner_fn(call.message.message_id, call.from_user.id):
         await call.answer("🚫 Это не ваша кнопка!", show_alert=True)
         return
 
-    lot_id = int(call.data.split("_")[-1])
-    uid    = call.from_user.id
-    lot    = db_get_listing(lot_id)
+    parts     = call.data.split("_")
+    lot_id    = int(parts[2])
+    range_idx = int(parts[3]) if len(parts) > 3 else 0
+    uid       = call.from_user.id
+    lot       = db_get_listing(lot_id)
 
     if not lot or lot["status"] != "active":
         await call.answer("❌ Лот уже недоступен!", show_alert=True)
@@ -676,9 +808,9 @@ async def cb_lot_detail(call: CallbackQuery, state: FSMContext):
         await call.answer("❌ Это ваш лот!", show_alert=True)
         return
 
-    stats      = db_get_seller_stats(lot["seller_id"])
-    lot_price  = round(lot["price_per_10k"] * (lot["px_amount"] / 10_000), 2)
-    expire     = datetime.fromisoformat(lot["expires_at"]).strftime("%d.%m.%Y")
+    stats     = db_get_seller_stats(lot["seller_id"])
+    lot_price = _lot_total_price(lot)
+    expire    = datetime.fromisoformat(lot["expires_at"]).strftime("%d.%m.%Y")
 
     await call.message.edit_text(
         f'<tg-emoji emoji-id="{EMOJI_BUY}">💸</tg-emoji> <b>Лот #{lot_id}</b>\n\n'
@@ -692,14 +824,14 @@ async def cb_lot_detail(call: CallbackQuery, state: FSMContext):
         f'🏷  <b>Цена лота: ${lot_price:.2f}</b>\n'
         f'⏳  Активен до: {expire}'
         f'</blockquote>',
-        reply_markup=_kb_lot_detail(lot_id),
+        reply_markup=_kb_lot_detail(lot_id, range_idx),
     )
     set_owner_fn(call.message.message_id, uid)
     await call.answer()
 
 
 # ════════════════════════════════════════════════════════════
-#  ПОКУПКА — создание инвойса
+#  ПОКУПКА — создание инвойса (с защитой от дублей)
 # ════════════════════════════════════════════════════════════
 @exchange_router.callback_query(F.data.startswith("ex_buy_lot_"))
 async def cb_buy_lot(call: CallbackQuery, state: FSMContext):
@@ -718,7 +850,7 @@ async def cb_buy_lot(call: CallbackQuery, state: FSMContext):
         await call.answer("❌ Нельзя купить собственный лот!", show_alert=True)
         return
 
-    lot_price  = round(lot["price_per_10k"] * (lot["px_amount"] / 10_000), 2)
+    lot_price  = _lot_total_price(lot)
 
     try:
         invoice = await _create_invoice(
@@ -755,7 +887,7 @@ async def cb_buy_lot(call: CallbackQuery, state: FSMContext):
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="💳 Оплатить", url=pay_url)],
             [InlineKeyboardButton(
-                text="Назад", callback_data="ex_buy_0", icon_custom_emoji_id=EMOJI_BACK
+                text="Назад", callback_data="ex_buy_0_0", icon_custom_emoji_id=EMOJI_BACK
             )],
         ]),
     )
@@ -771,7 +903,7 @@ async def cb_buy_lot(call: CallbackQuery, state: FSMContext):
 
 
 # ════════════════════════════════════════════════════════════
-#  Поллинг инвойса
+#  Поллинг инвойса — атомарная защита от дублей
 # ════════════════════════════════════════════════════════════
 async def _poll_invoice(
     invoice_id: int, lot_id: int,
@@ -788,8 +920,10 @@ async def _poll_invoice(
             continue
 
         if status == "paid":
-            lot = db_get_listing(lot_id)
-            if not lot or lot["status"] != "active":
+            # Атомарно помечаем лот проданным — защита от race condition/дублей
+            sold = db_mark_listing_sold_atomic(lot_id, buyer_id)
+            if not sold:
+                # Лот уже куплен другим или снят
                 try:
                     await _bot_ref.send_message(
                         chat_id,
@@ -802,7 +936,7 @@ async def _poll_invoice(
                     pass
                 return
 
-            db_mark_listing_sold(lot_id, buyer_id)
+            lot = db_get_listing(lot_id)
             db_mark_invoice_paid(invoice_id)
 
             seller_earn = round(total_usd * (1 - COMMISSION_SELL), 4)
@@ -814,7 +948,7 @@ async def _poll_invoice(
                 await _bot_ref.send_message(
                     lot["seller_id"],
                     f'<tg-emoji emoji-id="{EMOJI_SUCCESS}">✅</tg-emoji> '
-                    f'<b>Сделка #{lot_id} куплена!</b>\n\n'
+                    f'<b>Лот #{lot_id} куплен!</b>\n\n'
                     f'<blockquote>'
                     f'👤  Покупатель: @{buyer_name}\n'
                     f'📦  Продано: {int(lot["px_amount"]):,} Px\n'
@@ -877,7 +1011,7 @@ async def cb_my_lots(call: CallbackQuery, state: FSMContext):
     if not lots:
         text = (
             f'<tg-emoji emoji-id="{EMOJI_STATS}">📊</tg-emoji> <b>Мои лоты</b>\n\n'
-            f'<blockquote>У вас нет активных лотов.</blockquote>'
+            f'<blockquote>У вас нет активных лотов.\nЛимит: {MAX_ACTIVE_LOTS} лотов</blockquote>'
         )
         await call.message.edit_text(
             text,
@@ -891,7 +1025,7 @@ async def cb_my_lots(call: CallbackQuery, state: FSMContext):
         text = (
             f'<tg-emoji emoji-id="{EMOJI_STATS}">📊</tg-emoji> <b>Мои лоты</b>\n\n'
             f'<blockquote>'
-            f'Активных лотов: <b>{len(lots)}</b>\n'
+            f'Активных: <b>{len(lots)} / {MAX_ACTIVE_LOTS}</b>\n'
             f'Страница: <b>{page + 1} / {total_pages}</b>\n\n'
             f'Нажмите на лот для управления:'
             f'</blockquote>'
@@ -916,8 +1050,7 @@ async def cb_my_lot_detail(call: CallbackQuery, state: FSMContext):
         await call.answer("❌ Лот не найден или уже неактивен!", show_alert=True)
         return
 
-    lot_price  = round(lot["price_per_10k"] * (lot["px_amount"] / 10_000), 2)
-    cancel_fee = round(lot_price * COMMISSION_CANCEL, 2)
+    lot_price  = _lot_total_price(lot)
     refund     = round(lot["px_amount"] * (1 - COMMISSION_CANCEL))
     expire     = datetime.fromisoformat(lot["expires_at"]).strftime("%d.%m.%Y")
 
@@ -1006,7 +1139,7 @@ async def cb_cancel_lot_confirm(call: CallbackQuery, state: FSMContext):
 
 
 # ════════════════════════════════════════════════════════════
-#  ВЫВОД — подача заявки
+#  ВЫВОД
 # ════════════════════════════════════════════════════════════
 @exchange_router.callback_query(F.data == "ex_withdraw")
 async def cb_withdraw(call: CallbackQuery, state: FSMContext):
@@ -1134,10 +1267,8 @@ async def cb_withdraw_confirm(call: CallbackQuery, state: FSMContext):
     await call.answer()
 
 
-
-
 # ════════════════════════════════════════════════════════════
-#  СТАТИСТИКА
+#  СТАТИСТИКА (продажи + покупки)
 # ════════════════════════════════════════════════════════════
 @exchange_router.callback_query(F.data == "ex_stats")
 async def cb_ex_stats(call: CallbackQuery, state: FSMContext):
@@ -1147,8 +1278,10 @@ async def cb_ex_stats(call: CallbackQuery, state: FSMContext):
 
     uid    = call.from_user.id
     stats  = db_get_seller_stats(uid)
+    bstats = db_get_buyer_stats(uid)
     wstats = db_get_withdraw_stats(uid)
     bal    = db_get_usd_balance(uid)
+    active = db_count_active_listings_by_seller(uid)
 
     await call.message.edit_text(
         f'<tg-emoji emoji-id="{EMOJI_STATS}">📊</tg-emoji> <b>Биржа — Статистика</b>\n\n'
@@ -1156,8 +1289,16 @@ async def cb_ex_stats(call: CallbackQuery, state: FSMContext):
         f'💵  Баланс $: <b>${bal:.2f}</b>'
         f'</blockquote>\n\n'
         f'<blockquote>'
-        f'📤  Продаж: <b>{stats["total_sales"]}</b>\n'
-        f'💰  Заработано: <b>${stats["total_earned"]:.2f}</b>'
+        f'📤  <b>Продажи</b>\n'
+        f'Лотов активно: <b>{active} / {MAX_ACTIVE_LOTS}</b>\n'
+        f'Продаж: <b>{stats["total_sales"]}</b>\n'
+        f'Заработано: <b>${stats["total_earned"]:.2f}</b>'
+        f'</blockquote>\n\n'
+        f'<blockquote>'
+        f'💸  <b>Покупки</b>\n'
+        f'Куплено лотов: <b>{bstats["total_buys"]}</b>\n'
+        f'Получено Px: <b>{int(bstats["total_px_received"]):,} Px</b>\n'
+        f'Потрачено: <b>${bstats["total_spent"]:.2f}</b>'
         f'</blockquote>\n\n'
         f'<blockquote>'
         f'🏦  Выводов: <b>{wstats["count"]}</b>\n'
@@ -1170,7 +1311,7 @@ async def cb_ex_stats(call: CallbackQuery, state: FSMContext):
 
 
 # ════════════════════════════════════════════════════════════
-#  АДМИН — /check <id|@username>  (последние 5 продаж)
+#  АДМИН — /check
 # ════════════════════════════════════════════════════════════
 @exchange_router.message(Command("check"))
 async def cmd_check(message: Message):
@@ -1188,7 +1329,6 @@ async def cmd_check(message: Message):
 
     target_raw = args[1].strip()
 
-    # Импортируем db_get_user из database.py
     from database import get_conn as _main_get_conn
     with _main_get_conn() as conn:
         if target_raw.lstrip('-').isdigit():
@@ -1205,16 +1345,23 @@ async def cmd_check(message: Message):
         await message.answer(f'❌ Пользователь <code>{target_raw}</code> не найден.')
         return
 
-    row = dict(row)
+    row         = dict(row)
     target_uid  = row["id"]
     display     = f'@{row["username"]}' if row["username"] else row["first_name"]
     usd_bal     = db_get_usd_balance(target_uid)
     sales       = db_get_seller_last_sales(target_uid, limit=5)
+    bstats      = db_get_buyer_stats(target_uid)
+    active      = db_count_active_listings_by_seller(target_uid)
 
     lines = [
         f'<tg-emoji emoji-id="{EMOJI_STATS}">📊</tg-emoji> '
         f'<b>Биржа: {display}</b> (ID: <code>{target_uid}</code>)\n\n'
-        f'<blockquote>💵  Баланс $: <b>${usd_bal:.2f}</b></blockquote>\n\n'
+        f'<blockquote>'
+        f'💵  Баланс $: <b>${usd_bal:.2f}</b>\n'
+        f'📦  Активных лотов: <b>{active} / {MAX_ACTIVE_LOTS}</b>\n'
+        f'💸  Куплено лотов: <b>{bstats["total_buys"]}</b> · '
+        f'потрачено <b>${bstats["total_spent"]:.2f}</b>'
+        f'</blockquote>\n\n'
         f'<b>Последние продажи ({len(sales)}):</b>'
     ]
     if not sales:
@@ -1235,7 +1382,7 @@ async def cmd_check(message: Message):
 
 
 # ════════════════════════════════════════════════════════════
-#  АДМИН — /checkw  (все pending заявки)
+#  АДМИН — /checkw
 # ════════════════════════════════════════════════════════════
 @exchange_router.message(Command("checkw"))
 async def cmd_checkw(message: Message):
@@ -1272,7 +1419,7 @@ async def cmd_checkw(message: Message):
 
 
 # ════════════════════════════════════════════════════════════
-#  АДМИН — /take #id  (одобрить заявку)
+#  АДМИН — /take
 # ════════════════════════════════════════════════════════════
 @exchange_router.message(Command("take"))
 async def cmd_take(message: Message):
@@ -1296,14 +1443,11 @@ async def cmd_take(message: Message):
         await message.answer(f'❌ Заявка <b>#{req_id}</b> не найдена или уже обработана.')
         return
 
-    # Создаём чек CryptoBot
     try:
         check_url = await _create_withdraw_check(req["net_usd"])
     except Exception as e:
         logger.error("Withdraw check error on /take: %s", e)
-        # Возвращаем деньги пользователю
         db_add_usd(req["user_id"], req["amount_usd"])
-        # Откатываем статус
         from treyd_db import get_conn as _tdb_conn
         with _tdb_conn() as conn:
             conn.execute(
@@ -1316,7 +1460,6 @@ async def cmd_take(message: Message):
         )
         return
 
-    # Отправляем чек пользователю
     try:
         await _bot_ref.send_message(
             req["user_id"],
@@ -1346,7 +1489,7 @@ async def cmd_take(message: Message):
 
 
 # ════════════════════════════════════════════════════════════
-#  АДМИН — /reject #id  (отклонить заявку)
+#  АДМИН — /reject
 # ════════════════════════════════════════════════════════════
 @exchange_router.message(Command("reject"))
 async def cmd_reject(message: Message):
@@ -1370,7 +1513,6 @@ async def cmd_reject(message: Message):
         await message.answer(f'❌ Заявка <b>#{req_id}</b> не найдена или уже обработана.')
         return
 
-    # Возвращаем деньги пользователю
     db_add_usd(req["user_id"], req["amount_usd"])
 
     try:
@@ -1397,7 +1539,7 @@ async def cmd_reject(message: Message):
 
 
 # ════════════════════════════════════════════════════════════
-#  Watchdog: возврат Px по истёкшим лотам
+#  Watchdog
 # ════════════════════════════════════════════════════════════
 async def exchange_watchdog():
     while True:
@@ -1410,7 +1552,7 @@ async def exchange_watchdog():
                     await _bot_ref.send_message(
                         lot["seller_id"],
                         f'<tg-emoji emoji-id="{EMOJI_WARN}">⚠️</tg-emoji> '
-                        f'<b>Сделка #{lot["id"]} истекла!</b>\n\n'
+                        f'<b>Лот #{lot["id"]} истёк!</b>\n\n'
                         f'<blockquote>'
                         f'Срок действия лота закончился.\n'
                         f'📦  Возвращено: <b>{int(lot["px_amount"]):,} Px</b>'
