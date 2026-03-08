@@ -452,8 +452,8 @@ async def tower_cell_handler(callback: CallbackQuery, state: FSMContext):
             await callback.message.edit_text(
                 f"<blockquote><b>💥 Вы попали на бомбу!</b></blockquote>\n\n"
                 f"<blockquote>"
-                f"<tg-emoji emoji-id="5429518319243775957">👋</tg-emoji>Потеряно: <code>{bet}</code> Px\n"
-                f"<tg-emoji emoji-id="5278467510604160626">👋</tg-emoji>Баланс: <code>{balance:.2f}</code> Px"
+                f'<tg-emoji emoji-id="5429518319243775957">👋</tg-emoji>Потеряно: <code>{bet}</code> Px\n'
+                f'<tg-emoji emoji-id="5278467510604160626">👋</tg-emoji>Баланс: <code>{balance:.2f}</code> Px'
                 f"</blockquote>\n\n"
                 f"<blockquote><b><i>Башня рухнула! Попробуйте снова!</i></b></blockquote>",
                 parse_mode=ParseMode.HTML,
@@ -487,11 +487,11 @@ async def tower_cell_handler(callback: CallbackQuery, state: FSMContext):
 
                 balance = db_get_px(user_id)
                 await callback.message.edit_text(
-                    f"<blockquote><b><tg-emoji emoji-id="5461151367559141950">👋</tg-emoji> Вы прошли все этажи!</b></blockquote>\n\n"
+                    f'<blockquote><b><tg-emoji emoji-id="5461151367559141950">👋</tg-emoji> Вы прошли все этажи!</b></blockquote>\n\n'
                     f"<blockquote>"
-                    f"<tg-emoji emoji-id="5201691993775818138">👋</tg-emoji>Множитель: <b>x{mult}</b>\n"
-                    f"<tg-emoji emoji-id="5429651785352501917">👋</tg-emoji>Выигрыш: <code>{winnings}</code> Px\n"
-                    f"<tg-emoji emoji-id="5278467510604160626">👋</tg-emoji>Баланс: <code>{balance:.2f}</code> Px"
+                    f'<tg-emoji emoji-id="5201691993775818138">👋</tg-emoji>Множитель: <b>x{mult}</b>\n'
+                    f'<tg-emoji emoji-id="5429651785352501917">👋</tg-emoji>Выигрыш: <code>{winnings}</code> Px\n'
+                    f'<tg-emoji emoji-id="5278467510604160626">👋</tg-emoji>Баланс: <code>{balance:.2f}</code> Px'
                     f"</blockquote>",
                     parse_mode=ParseMode.HTML,
                     reply_markup=InlineKeyboardMarkup(inline_keyboard=[
@@ -556,11 +556,11 @@ async def tower_cashout(callback: CallbackQuery, state: FSMContext):
 
     balance = db_get_px(user_id)
     await callback.message.edit_text(
-        f"<blockquote><b><tg-emoji emoji-id="5461151367559141950">👋</tg-emoji> Кэшаут!</b></blockquote>\n\n"
+        f'<blockquote><b><tg-emoji emoji-id="5461151367559141950">👋</tg-emoji> Кэшаут!</b></blockquote>\n\n'
         f"<blockquote>"
-        f"<tg-emoji emoji-id="5201691993775818138">👋</tg-emoji>Множитель: <b>x{mult}</b>\n"
-        f"<tg-emoji emoji-id="5429651785352501917">👋</tg-emoji>Выигрыш: <code>{winnings}</code> Px\n"
-        f"<tg-emoji emoji-id="5278467510604160626">👋</tg-emoji>Баланс: <code>{balance:.2f}</code> Px"
+        f'<tg-emoji emoji-id="5201691993775818138">👋</tg-emoji>Множитель: <b>x{mult}</b>\n'
+        f'<tg-emoji emoji-id="5429651785352501917">👋</tg-emoji>Выигрыш: <code>{winnings}</code> Px\n'
+        f'<tg-emoji emoji-id="5278467510604160626">👋</tg-emoji>Баланс: <code>{balance:.2f}</code> Px'
         f"</blockquote>",
         parse_mode=ParseMode.HTML,
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
