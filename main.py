@@ -303,8 +303,7 @@ def cancel_promo_keyboard() -> InlineKeyboardMarkup:
 def profile_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text="Статистика", callback_data="stats",  icon_custom_emoji_id=EMOJI_STATS),
-            InlineKeyboardButton(text="Купить Px",  callback_data="buy_px", icon_custom_emoji_id=EMOJI_GOLD),
+            InlineKeyboardButton(text="Статистика", callback_data="stats", icon_custom_emoji_id=EMOJI_STATS),
         ],
         [
             InlineKeyboardButton(text="Назад", callback_data="main_menu", icon_custom_emoji_id=EMOJI_BACK),
@@ -547,15 +546,6 @@ async def cb_stats(call: CallbackQuery):
         await call.answer("🚫 Это не ваша кнопка!", show_alert=True); return
     user = db_get_or_create_user(call.from_user)
     await call.message.edit_text(build_stats_text(user), reply_markup=back_profile_keyboard())
-    set_owner(call.message.message_id, call.from_user.id)
-    await call.answer()
-
-
-@dp.callback_query(F.data == "buy_px")
-async def cb_buy_px(call: CallbackQuery):
-    if not is_owner(call.message.message_id, call.from_user.id):
-        await call.answer("🚫 Это не ваша кнопка!", show_alert=True); return
-    await call.message.edit_text(dev_text("Купить Px"), reply_markup=back_profile_keyboard())
     set_owner(call.message.message_id, call.from_user.id)
     await call.answer()
 
