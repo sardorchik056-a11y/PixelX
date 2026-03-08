@@ -53,7 +53,6 @@ def init_db():
                 accumulated   REAL    NOT NULL DEFAULT 0
             );
 
-            -- Рефералы: кто кого пригласил
             CREATE TABLE IF NOT EXISTS referrals (
                 invitee_id    INTEGER PRIMARY KEY,
                 inviter_id    INTEGER NOT NULL,
@@ -65,11 +64,25 @@ def init_db():
 
             CREATE INDEX IF NOT EXISTS idx_referrals_inviter ON referrals(inviter_id);
 
-            -- Ежедневный бонус: время последнего броска кубика
             CREATE TABLE IF NOT EXISTS bonus (
                 uid           INTEGER PRIMARY KEY,
                 last_bonus_at TEXT,
                 FOREIGN KEY (uid) REFERENCES users(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS promocodes (
+                code          TEXT    PRIMARY KEY,
+                reward        REAL    NOT NULL,
+                max_uses      INTEGER NOT NULL,
+                used_count    INTEGER NOT NULL DEFAULT 0,
+                created_at    TEXT    NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS promo_used (
+                code          TEXT    NOT NULL,
+                uid           INTEGER NOT NULL,
+                used_at       TEXT    NOT NULL,
+                PRIMARY KEY (code, uid)
             );
         """)
     print("✅ БД инициализирована")
@@ -127,7 +140,6 @@ def db_add_px(uid: int, amount: float):
 
 
 def db_spend_px(uid: int, amount: float):
-    """Безусловное списание (не проверяет баланс)."""
     if amount <= 0:
         return
     with get_conn() as conn:
@@ -137,15 +149,9 @@ def db_spend_px(uid: int, amount: float):
 
 
 def db_try_spend_px(uid: int, amount: float) -> bool:
-    """
-    Атомарное списание с проверкой баланса.
-    Возвращает True если средства списаны, False если недостаточно.
-    Используется в играх — гарантирует, что ставка снята ровно один раз.
-    """
     if amount <= 0:
         return False
     with get_conn() as conn:
-        # Атомарное обновление: списываем только если хватает
         cur = conn.execute("""
             UPDATE users
             SET px = ROUND(px - ?, 2)
@@ -155,11 +161,6 @@ def db_try_spend_px(uid: int, amount: float) -> bool:
 
 
 def db_record_game_result(uid: int, bet: float, won: float):
-    """
-    Фиксирует результат игры в статистике пользователя.
-    won > 0  → запись в total_won
-    won == 0 → запись в total_lost (ставка)
-    """
     with get_conn() as conn:
         if won > 0:
             conn.execute("""
@@ -177,7 +178,6 @@ def db_record_game_result(uid: int, bet: float, won: float):
             """, (bet, uid))
 
 
-# Асинхронная обёртка для совместимости с asyncio.create_task
 async def save_game_result(uid: int, _game_name: str, won: float, bet: float = 0.0):
     db_record_game_result(uid, bet, won)
 
@@ -325,3 +325,64 @@ def db_is_already_referred(uid: int) -> bool:
             "SELECT 1 FROM referrals WHERE invitee_id = ?", (uid,)
         ).fetchone()
         return row is not None
+
+
+# ─────────────────────────────────────────
+#  Промокоды
+# ─────────────────────────────────────────
+def db_create_promo(code: str, reward: float, max_uses: int) -> bool:
+    """Создать промокод. Возвращает False если такой код уже существует."""
+    now = datetime.now().isoformat()
+    with get_conn() as conn:
+        existing = conn.execute(
+            "SELECT 1 FROM promocodes WHERE code = ?", (code,)
+        ).fetchone()
+        if existing:
+            return False
+        conn.execute("""
+            INSERT INTO promocodes (code, reward, max_uses, used_count, created_at)
+            VALUES (?, ?, ?, 0, ?)
+        """, (code, reward, max_uses, now))
+        return True
+
+
+def db_use_promo(uid: int, code: str) -> dict:
+    """
+    Попытка активировать промокод пользователем.
+    Возвращает dict:
+      ok:     bool
+      reason: 'not_found' | 'expired' | 'already_used' | None
+      reward: float
+    """
+    code = code.strip().upper()
+    with get_conn() as conn:
+        promo = conn.execute(
+            "SELECT * FROM promocodes WHERE code = ?", (code,)
+        ).fetchone()
+
+        if not promo:
+            return {"ok": False, "reason": "not_found", "reward": 0}
+
+        if promo["used_count"] >= promo["max_uses"]:
+            return {"ok": False, "reason": "expired", "reward": 0}
+
+        already = conn.execute(
+            "SELECT 1 FROM promo_used WHERE code = ? AND uid = ?", (code, uid)
+        ).fetchone()
+        if already:
+            return {"ok": False, "reason": "already_used", "reward": 0}
+
+        now = datetime.now().isoformat()
+        conn.execute(
+            "INSERT INTO promo_used (code, uid, used_at) VALUES (?, ?, ?)",
+            (code, uid, now)
+        )
+        conn.execute(
+            "UPDATE promocodes SET used_count = used_count + 1 WHERE code = ?",
+            (code,)
+        )
+        conn.execute(
+            "UPDATE users SET px = ROUND(px + ?, 2) WHERE id = ?",
+            (promo["reward"], uid)
+        )
+        return {"ok": True, "reason": None, "reward": float(promo["reward"])}
