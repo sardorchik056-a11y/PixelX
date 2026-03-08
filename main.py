@@ -545,7 +545,6 @@ async def cmd_start(message: Message, command: CommandObject, state: FSMContext)
                                     text=(
                                         f'<tg-emoji emoji-id="5222079954421818267">👥</tg-emoji> '
                                         f'<b>Новый реферал!</b>\n\n'
-                                        f'Вам начислено <b>{REFERRAL_REWARD_PX} Px</b>!'
                                     )
                                 )
                             except Exception:
