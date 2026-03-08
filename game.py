@@ -519,14 +519,14 @@ async def cb_dice_exact(call: CallbackQuery):
         await call.answer("🚫 Это не ваша кнопка!", show_alert=True); return
     markup = InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text=" (x5.7)", callback_data="bet_куб_1"), icon_custom_emoji_id=EMOJI_1),
-            InlineKeyboardButton(text=" (x5.7)", callback_data="bet_куб_2"), icon_custom_emoji_id=EMOJI_2),
-            InlineKeyboardButton(text=" (x5.7)", callback_data="bet_куб_3"), icon_custom_emoji_id=EMOJI_3),
+            InlineKeyboardButton(text=" (x5.7)", callback_data="bet_куб_1", icon_custom_emoji_id=EMOJI_1),
+            InlineKeyboardButton(text=" (x5.7)", callback_data="bet_куб_2", icon_custom_emoji_id=EMOJI_2),
+            InlineKeyboardButton(text=" (x5.7)", callback_data="bet_куб_3", icon_custom_emoji_id=EMOJI_3),
         ],
         [
-            InlineKeyboardButton(text=" (x5.7)", callback_data="bet_куб_4"), icon_custom_emoji_id=EMOJI_4),
-            InlineKeyboardButton(text=" (x5.7)", callback_data="bet_куб_5"), icon_custom_emoji_id=EMOJI_5),
-            InlineKeyboardButton(text=" (x5.7)", callback_data="bet_куб_6"), icon_custom_emoji_id=EMOJI_6),
+            InlineKeyboardButton(text=" (x5.7)", callback_data="bet_куб_4", icon_custom_emoji_id=EMOJI_4),
+            InlineKeyboardButton(text=" (x5.7)", callback_data="bet_куб_5", icon_custom_emoji_id=EMOJI_5),
+            InlineKeyboardButton(text=" (x5.7)", callback_data="bet_куб_6", icon_custom_emoji_id=EMOJI_6),
         ],
         [InlineKeyboardButton(text="Назад", callback_data="game_menu_dice", icon_custom_emoji_id=EMOJI_BACK)],
     ])
