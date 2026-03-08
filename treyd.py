@@ -393,7 +393,7 @@ def _text_main(uid: int) -> str:
         f'<b>Баланс Px:</b> <code>{px:,.0f} Px</code>'
         f'</blockquote>\n\n'
         f'<blockquote>'
-        f'<b><tg-emoji emoji-id="5429651785352501917">💱</tg-emoji>Покупка $-Px <code>50000-1mlrd Px</code>,/b>\n'
+        f'<b><tg-emoji emoji-id="5429651785352501917">💱</tg-emoji>Покупка $-Px <code>50000-1mlrd Px</code></b>\n'
         f'<b><tg-emoji emoji-id="5429518319243775957">💱</tg-emoji>Продажа Px-$ <code>50000-1mlrd Px</code></b>\n'
         f'</blockquote>'
     
