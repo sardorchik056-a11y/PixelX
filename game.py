@@ -52,6 +52,12 @@ EMOJI_NUMBER  = "5456140674028019486"
 EMOJI_GOAL    = "5206607081334906820"
 EMOJI_3POINT  = "5397782960512444700"
 EMOJI_MISS    = "5210952531676504517"
+EMOJI_1 = "5382322671679708881"
+EMOJI_2 = "5381990043642502553"
+EMOJI_3 = "5381879959335738545"
+EMOJI_4 = "5382054253403577563"
+EMOJI_5 = "5391197405553107640"
+EMOJI_6 = "5390966190283694453"
 
 # ─────────────────────────────────────────
 #  Конфиги ставок
@@ -513,14 +519,14 @@ async def cb_dice_exact(call: CallbackQuery):
         await call.answer("🚫 Это не ваша кнопка!", show_alert=True); return
     markup = InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text="1️⃣ (x5.7)", callback_data="bet_куб_1"),
-            InlineKeyboardButton(text="2️⃣ (x5.7)", callback_data="bet_куб_2"),
-            InlineKeyboardButton(text="3️⃣ (x5.7)", callback_data="bet_куб_3"),
+            InlineKeyboardButton(text=" (x5.7)", callback_data="bet_куб_1"), icon_custom_emoji_id=EMOJI_1),
+            InlineKeyboardButton(text=" (x5.7)", callback_data="bet_куб_2"), icon_custom_emoji_id=EMOJI_2),
+            InlineKeyboardButton(text=" (x5.7)", callback_data="bet_куб_3"), icon_custom_emoji_id=EMOJI_3),
         ],
         [
-            InlineKeyboardButton(text="4️⃣ (x5.7)", callback_data="bet_куб_4"),
-            InlineKeyboardButton(text="5️⃣ (x5.7)", callback_data="bet_куб_5"),
-            InlineKeyboardButton(text="6️⃣ (x5.7)", callback_data="bet_куб_6"),
+            InlineKeyboardButton(text=" (x5.7)", callback_data="bet_куб_4"), icon_custom_emoji_id=EMOJI_4),
+            InlineKeyboardButton(text=" (x5.7)", callback_data="bet_куб_5"), icon_custom_emoji_id=EMOJI_5),
+            InlineKeyboardButton(text=" (x5.7)", callback_data="bet_куб_6"), icon_custom_emoji_id=EMOJI_6),
         ],
         [InlineKeyboardButton(text="Назад", callback_data="game_menu_dice", icon_custom_emoji_id=EMOJI_BACK)],
     ])
