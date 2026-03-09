@@ -22,6 +22,7 @@ import mines as _mines_module
 import gold as _gold_module
 import treyd as _treyd_module
 import helper as _helper_module
+import duels as _duels_module
 
 from mine import mine_router, mine_watchdog
 from referrals import referral_router
@@ -32,6 +33,16 @@ from mines import mines_router
 from gold import gold_router
 from treyd import exchange_router, exchange_watchdog
 from helper import helper_router
+from duels import (
+    duels_router,
+    setup_duels,
+    handle_duel_command,
+    handle_mygames,
+    handle_del,
+    is_duel_command,
+    is_mygames_command,
+    is_del_command,
+)
 
 from database import (
     init_db,
@@ -160,6 +171,20 @@ def inject_to_modules(bot: Bot):
     _treyd_module.set_owner_fn = set_owner
     _treyd_module.set_bot_ref(bot)
     _treyd_module.set_admin_ids(ADMIN_IDS)
+    # ── Дуэли ──
+    class _DuelsStorage:
+        def get_balance(self, uid: int) -> float:
+            return db_get_px(uid)
+
+        def add_balance(self, uid: int, amount: float):
+            if amount >= 0:
+                db_add_px(uid, amount)
+            else:
+                db_spend_px(uid, abs(amount))
+
+    setup_duels(bot, _DuelsStorage())
+    _duels_module.set_owner_fn = is_owner
+    _duels_module.set_owner_fn = set_owner
 
 
 # ─────────────────────────────────────────
@@ -184,6 +209,7 @@ dp.include_router(tower_router)
 dp.include_router(mines_router)
 dp.include_router(gold_router)
 dp.include_router(exchange_router)   # ← Биржа
+dp.include_router(duels_router)      # ← Дуэли
 dp.include_router(helper_router)
 
 low_priority_router = Router()
@@ -869,9 +895,6 @@ async def cmd_addpromo(message: Message):
 
 # ─────────────────────────────────────────
 #  /add — команда админа: выдача Px
-#  Форматы:
-#    /add @username 1000
-#    /add 123456789 1000
 # ─────────────────────────────────────────
 def _db_find_user_by_username(username: str) -> dict | None:
     """Найти пользователя по username (без @, регистр не важен)."""
@@ -900,7 +923,7 @@ async def cmd_add_px(message: Message):
         await message.answer("🚫 У вас нет доступа к этой команде!")
         return
 
-    args = (message.text or "").split(maxsplit=2)[1:]  # убираем /add
+    args = (message.text or "").split(maxsplit=2)[1:]
 
     if len(args) != 2:
         await message.answer(
@@ -915,7 +938,6 @@ async def cmd_add_px(message: Message):
 
     target_raw, amount_raw = args
 
-    # Парсим сумму
     try:
         amount = float(amount_raw.replace(',', '.'))
     except ValueError:
@@ -926,7 +948,6 @@ async def cmd_add_px(message: Message):
         await message.answer("❌ Сумма не может быть нулём!")
         return
 
-    # Ищем пользователя
     target_raw = target_raw.strip()
     if target_raw.lstrip('-').isdigit():
         target = _db_find_user_by_id(int(target_raw))
@@ -946,13 +967,11 @@ async def cmd_add_px(message: Message):
 
     target_uid = target['id']
 
-    # Начисляем или списываем
     if amount > 0:
         db_add_px(target_uid, amount)
         action = 'начислено'
         sign   = '+'
     else:
-        # Отрицательная сумма — списание (без ухода в минус)
         abs_amount = abs(amount)
         success    = db_try_spend_px(target_uid, abs_amount)
         if not success:
@@ -981,7 +1000,6 @@ async def cmd_add_px(message: Message):
         f'</blockquote>'
     )
 
-    # Уведомление пользователю
     notif_text = (
         f'<tg-emoji emoji-id="{EMOJI_GOLD}">⚡</tg-emoji> '
         f'<b>Изменение баланса</b>\n\n'
@@ -993,11 +1011,11 @@ async def cmd_add_px(message: Message):
     try:
         await bot.send_message(target_uid, notif_text)
     except Exception:
-        pass  # пользователь мог заблокировать бота
+        pass
 
 
 # ─────────────────────────────────────────
-#  Баланс — low_priority_router
+#  Баланс + Дуэли — low_priority_router
 # ─────────────────────────────────────────
 _BALANCE_WORDS = {
     "б", "b",
@@ -1007,9 +1025,24 @@ _BALANCE_WORDS = {
 
 
 @low_priority_router.message(F.text)
-async def cmd_balance_text(message: Message):
+async def cmd_low_priority_text(message: Message):
     text = (message.text or "").strip()
 
+    # ── Дуэли (текстовые команды) ──
+    if is_duel_command(text):
+        db_get_or_create_user(message.from_user)
+        await handle_duel_command(message)
+        return
+
+    if is_mygames_command(text):
+        await handle_mygames(message)
+        return
+
+    if is_del_command(text):
+        await handle_del(message)
+        return
+
+    # ── Баланс ──
     if " " in text or "\n" in text:
         return
     if text.lower() not in _BALANCE_WORDS:
@@ -1042,10 +1075,9 @@ dp.include_router(game_low_router)
 #  Запуск
 # ─────────────────────────────────────────
 async def main():
-    # Удаляем webhook перед запуском polling
     await bot.delete_webhook(drop_pending_updates=True)
     print("✅ Webhook удален")
-    
+
     init_db()
     init_exchange_db()
     inject_to_modules(bot)
