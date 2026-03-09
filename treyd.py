@@ -688,7 +688,6 @@ async def cb_select_range(call: CallbackQuery, state: FSMContext):
         await call.answer("🚫 Это не ваша кнопка!", show_alert=True)
         return
 
-    # range_idx — индекс в PX_RANGES (0..3)
     range_idx = int(call.data.split("_")[-1])
     uid = call.from_user.id
     await _show_buy_list(call, uid, page=0, range_idx=range_idx)
@@ -698,11 +697,6 @@ async def cb_select_range(call: CallbackQuery, state: FSMContext):
 #  ПОКУПКА — список лотов
 # ════════════════════════════════════════════════════════════
 async def _show_buy_list(call: CallbackQuery, uid: int, page: int, range_idx: int):
-    """
-    Хелпер: рендерит список лотов.
-    range_idx = -1 → все лоты (фильтр не активен).
-    range_idx = 0..3 → конкретный диапазон из PX_RANGES.
-    """
     if range_idx >= 0:
         label, px_min, px_max = PX_RANGES[range_idx]
         range_label = label
@@ -715,7 +709,6 @@ async def _show_buy_list(call: CallbackQuery, uid: int, page: int, range_idx: in
     page        = max(0, min(page, total_pages - 1))
     chunk       = all_lots[page * LISTINGS_PER_PAGE:(page + 1) * LISTINGS_PER_PAGE]
 
-    # Строим клавиатуру с 4 кнопками диапазона внизу (даже если лотов нет)
     kb = _kb_listings(chunk, page, total_pages, range_idx)
 
     if not all_lots:
@@ -749,9 +742,7 @@ async def cb_buy_list(call: CallbackQuery, state: FSMContext):
         return
 
     uid = call.from_user.id
-    # формат: ex_buy_{page}_{range_idx}  где range_idx может быть -1
-    # split даёт ['ex', 'buy', page, range_idx] или ['ex', 'buy', page, '-1'] -> нужно join last
-    raw = call.data[len("ex_buy_"):]        # "0_-1" или "0_2"
+    raw = call.data[len("ex_buy_"):]
     p_str, r_str = raw.rsplit("_", 1)
     page      = int(p_str)
     range_idx = int(r_str)
@@ -760,8 +751,9 @@ async def cb_buy_list(call: CallbackQuery, state: FSMContext):
 
 # ════════════════════════════════════════════════════════════
 #  ПОКУПКА — детали лота
+#  ИСПРАВЛЕНИЕ: регулярка принимает -1 (range_idx может быть отрицательным)
 # ════════════════════════════════════════════════════════════
-@exchange_router.callback_query(F.data.regexp(r'^ex_lot_\d+_\d+$'))
+@exchange_router.callback_query(F.data.regexp(r'^ex_lot_\d+_-?\d+$'))
 async def cb_lot_detail(call: CallbackQuery, state: FSMContext):
     if not is_owner_fn(call.message.message_id, call.from_user.id):
         await call.answer("🚫 Это не ваша кнопка!", show_alert=True)
@@ -857,13 +849,13 @@ async def cb_buy_lot(call: CallbackQuery, state: FSMContext):
         f'</blockquote>',
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(
-                text="Оплатить", 
-                url=pay_url, 
+                text="Оплатить",
+                url=pay_url,
                 icon_custom_emoji_id=EMOJI_PAY
             )],
             [InlineKeyboardButton(
-                text="Назад", 
-                callback_data="ex_buy_0_0", 
+                text="Назад",
+                callback_data="ex_buy_0_0",
                 icon_custom_emoji_id=EMOJI_BACK
             )],
          ]),
@@ -897,10 +889,8 @@ async def _poll_invoice(
             continue
 
         if status == "paid":
-            # Атомарно помечаем лот проданным — защита от race condition/дублей
             sold = db_mark_listing_sold_atomic(lot_id, buyer_id)
             if not sold:
-                # Лот уже куплен другим или снят
                 try:
                     await _bot_ref.send_message(
                         chat_id,
@@ -920,7 +910,6 @@ async def _poll_invoice(
             db_add_usd(lot["seller_id"], seller_earn)
             db_add_px(buyer_id, lot["px_amount"])
 
-            # Уведомление продавцу
             try:
                 await _bot_ref.send_message(
                     lot["seller_id"],
@@ -1441,9 +1430,9 @@ async def cmd_take(message: Message):
             f'</blockquote>',
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
                 InlineKeyboardButton(
-                   text="Получить чек", 
+                   text="Получить чек",
                    url=check_url,
-                   icon_custom_emoji_id=EMOJI_TAKEW  
+                   icon_custom_emoji_id=EMOJI_TAKEW
                 )
             ]]),
             parse_mode=ParseMode.HTML,
