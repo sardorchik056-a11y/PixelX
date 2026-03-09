@@ -571,7 +571,6 @@ def _get_check_image(amount: float) -> str | None:
     return _CHECK_IMAGES.get(amount)
 
 
-# ИЗМЕНЕНИЕ 1: кнопка — url-ссылка на бота (можно скопировать), не callback
 def _check_keyboard(check_id: str, exhausted: bool = False) -> InlineKeyboardMarkup:
     if exhausted:
         return InlineKeyboardMarkup(inline_keyboard=[
@@ -663,7 +662,6 @@ async def cmd_addcheck(message: Message):
         await message.answer(caption, reply_markup=keyboard)
 
 
-# ИЗМЕНЕНИЕ 2: ошибки "уже активировал" и "исчерпан" — сообщением в бот через /start deeplink
 async def _process_check_deeplink(message: Message, check_id: str):
     uid   = message.from_user.id
     check = _checks.get(check_id)
@@ -729,7 +727,6 @@ async def cmd_start(message: Message, command: CommandObject, state: FSMContext)
     if command.args:
         args = command.args.strip()
 
-        # ИЗМЕНЕНИЕ 3: обработка deeplink чека в /start
         if args.startswith("check_"):
             check_id = args[6:]
             await _process_check_deeplink(message, check_id)
@@ -1073,7 +1070,6 @@ async def cmd_addpromo(message: Message):
 #  /add — команда админа: выдача Px
 # ─────────────────────────────────────────
 def _db_find_user_by_username(username: str) -> dict | None:
-    """Найти пользователя по username (без @, регистр не важен)."""
     from database import get_conn
     with get_conn() as conn:
         row = conn.execute(
@@ -1087,7 +1083,6 @@ def _db_find_user_by_username(username: str) -> dict | None:
 
 
 def _db_find_user_by_id(uid: int) -> dict | None:
-    """Найти пользователя по числовому ID."""
     return db_get_user(uid)
 
 
@@ -1191,6 +1186,70 @@ async def cmd_add_px(message: Message):
 
 
 # ─────────────────────────────────────────
+#  /reck — рассылка всем пользователям (только админ)
+# ─────────────────────────────────────────
+def _db_get_all_user_ids() -> list[int]:
+    """Вернуть список всех ID пользователей из базы."""
+    from database import get_conn
+    with get_conn() as conn:
+        rows = conn.execute("SELECT id FROM users").fetchall()
+    return [row[0] for row in rows]
+
+
+@dp.message(Command("reck"))
+async def cmd_reck(message: Message, command: CommandObject):
+    admin_uid = message.from_user.id
+
+    if admin_uid not in ADMIN_IDS:
+        await message.answer("🚫 У вас нет доступа к этой команде!")
+        return
+
+    text = (command.args or "").strip()
+
+    if not text:
+        await message.answer(
+            f'<tg-emoji emoji-id="{EMOJI_NEWS}">📢</tg-emoji> <b>Неверный формат.</b>\n\n'
+            f'<blockquote>Использование:\n'
+            f'<code>/reck Текст вашего сообщения</code></blockquote>'
+        )
+        return
+
+    user_ids = _db_get_all_user_ids()
+    total    = len(user_ids)
+
+    status_msg = await message.answer(
+        f'<tg-emoji emoji-id="{EMOJI_NEWS}">📢</tg-emoji> <b>Рассылка запущена...</b>\n\n'
+        f'<blockquote>Всего пользователей: <b>{total}</b></blockquote>'
+    )
+
+    sent_ok   = 0
+    sent_fail = 0
+
+    for uid in user_ids:
+        try:
+            await bot.send_message(uid, text, parse_mode=ParseMode.HTML)
+            sent_ok += 1
+        except Exception:
+            sent_fail += 1
+        # небольшая задержка чтобы не словить flood от Telegram
+        await asyncio.sleep(0.05)
+
+    await bot.edit_message_text(
+        chat_id=admin_uid,
+        message_id=status_msg.message_id,
+        text=(
+            f'<tg-emoji emoji-id="{EMOJI_NEWS}">📢</tg-emoji> <b>Рассылка завершена!</b>\n\n'
+            f'<blockquote>'
+            f'✅  Доставлено: <b>{sent_ok}</b>\n'
+            f'❌  Не доставлено: <b>{sent_fail}</b>\n'
+            f'📊  Всего: <b>{total}</b>'
+            f'</blockquote>'
+        ),
+        parse_mode=ParseMode.HTML,
+    )
+
+
+# ─────────────────────────────────────────
 #  Баланс + Дуэли — low_priority_router
 # ─────────────────────────────────────────
 _BALANCE_WORDS = {
@@ -1255,7 +1314,6 @@ async def main():
     await bot.delete_webhook(drop_pending_updates=True)
     print("✅ Webhook удален")
 
-    # Получаем username бота для deeplink-ссылок чеков
     bot_info = await bot.get_me()
     _BOT_USERNAME = bot_info.username
     print(f"✅ Бот: @{_BOT_USERNAME}")
