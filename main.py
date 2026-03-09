@@ -919,14 +919,14 @@ def _check_keyboard(check_id: str, exhausted: bool = False) -> InlineKeyboardMar
     if exhausted:
         return InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(
-                text="✅ Чек исчерпан",
+                text="Чек исчерпан",
                 callback_data="check_exhausted",
                 icon_custom_emoji_id=EMOJI_GOLD,
             )]
         ])
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(
-            text="💰 Активировать чек",
+            text="Активировать",
             callback_data=f"check_activate:{check_id}",
             icon_custom_emoji_id=EMOJI_GOLD,
         )]
@@ -938,12 +938,7 @@ def _build_check_caption(check: dict) -> str:
     left     = check['max_uses'] - check['used_count']
     max_uses = check['max_uses']
     return (
-        f'<tg-emoji emoji-id="{EMOJI_GOLD}">💰</tg-emoji> <b>Чек PixelX</b>\n\n'
-        f'<blockquote>'
-        f'<tg-emoji emoji-id="5429651785352501917">⚡</tg-emoji>  <b>Сумма:</b> <code>{amt:,.2f} Px</code>\n'
-        f'<tg-emoji emoji-id="5400362079783770689">⚡</tg-emoji>  <b>Активаций:</b> <code>{check["used_count"]}/{max_uses}</code>\n'
-        f'<tg-emoji emoji-id="5278467510604160626">⚡</tg-emoji>  <b>Осталось:</b> <code>{left}</code>'
-        f'</blockquote>'
+        f'<tg-emoji emoji-id="5201691993775818138">💰</tg-emoji> <b>Чек на <code>{amt:,.2f} Px</code> нажмите ниже для активации! </b>\n\n'
     )
 
 
@@ -1078,7 +1073,7 @@ async def cb_check_activate(call: CallbackQuery):
         await bot.send_message(
             chat_id=uid,
             text=(
-                f'<tg-emoji emoji-id="{EMOJI_GOLD}">💰</tg-emoji> <b>Чек активирован!</b>\n\n'
+                f'<tg-emoji emoji-id="5201691993775818138">💰</tg-emoji> <b>Чек активирован!</b>\n\n'
                 f'<blockquote>'
                 f'<tg-emoji emoji-id="5429651785352501917">⚡</tg-emoji>  Начислено: <b>+{check["amount"]:,.2f} Px</b>\n'
                 f'<tg-emoji emoji-id="5278467510604160626">⚡</tg-emoji>  Баланс: <b>{db_get_px(uid):,.2f} Px</b>'
