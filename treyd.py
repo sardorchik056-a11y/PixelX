@@ -445,11 +445,11 @@ async def cb_sell_start(call: CallbackQuery, state: FSMContext):
     await call.message.edit_text(
         f'<tg-emoji emoji-id="{EMOJI_SELL}">📤</tg-emoji> <b>Продажа Px</b>\n\n'
         f'<blockquote>'
-        f'<b><tg-emoji emoji-id="5197269100878907942">💱</tg-emoji>Введите количество Px для продажи:</b>\n\n'
+        f'<b><tg-emoji emoji-id="5197269100878907942">💱</tg-emoji>Введите количество Px для продажи:</b>'
         f'</blockquote>\n'
         f'<blockquote>' 
-        f'<b><tg-emoji emoji-id="5447183459602669338">💱</tg-emoji>Минимум: {SELL_MIN_PX:,} Px</b>\n'
-        f'<b><tg-emoji emoji-id="5449683594425410231">💱</tg-emoji>Максимум: {SELL_MAX_PX:,} Px</b>\n\n'
+        f'<b><tg-emoji emoji-id="5429518319243775957">💱</tg-emoji>Минимум: {SELL_MIN_PX:,} Px</b>\n'
+        f'<b><tg-emoji emoji-id="5429651785352501917">💱</tg-emoji>Максимум: {SELL_MAX_PX:,} Px</b>\n\n'
         f'</blockquote>',
         reply_markup=_kb_cancel_sell(),
     )
@@ -515,10 +515,10 @@ async def handle_sell_amount(message: Message, state: FSMContext):
 
     new_mid = await _edit_or_send(
         uid, sell_msg_id,
-        f'<tg-emoji emoji-id="{EMOJI_SELL}">📤</tg-emoji> <b>Цена лота</b>\n\n'
+        f'<tg-emoji emoji-id="5197434882321567830">📤</tg-emoji> <b>Цена лота</b>\n\n'
         f'<blockquote>'
-        f'Количество: <b>{amount:,.0f} Px</b>\n\n'
-        f'Введите итоговую цену лота в $:\n'
+        f'<b><tg-emoji emoji-id="5325547803936572038">📤</tg-emoji>Количество: {amount:,.0f} Px</b>\n\n'
+        f'<b><tg-emoji emoji-id="5197269100878907942">📤</tg-emoji>Введите итоговую цену лота в $:</b>\n'
         f'От <b>${p_min:.2f}</b> до <b>${p_max:.2f}</b>'
         f'</blockquote>',
         _kb_cancel_sell(),
@@ -552,7 +552,7 @@ async def handle_sell_price(message: Message, state: FSMContext):
     if not (p_min - eps <= lot_price <= p_max + eps):
         new_mid = await _edit_or_send(
             uid, sell_msg_id,
-            f'<tg-emoji emoji-id="{EMOJI_WARN}">⚠️</tg-emoji> '
+            f'<tg-emoji emoji-id="5420323339723881652">⚠️</tg-emoji> '
             f'<b>Цена вне диапазона!</b>\n\n'
             f'Введите от <b>${p_min:.2f}</b> до <b>${p_max:.2f}</b>:',
             _kb_cancel_sell(),
@@ -570,13 +570,12 @@ async def handle_sell_price(message: Message, state: FSMContext):
 
     new_mid = await _edit_or_send(
         uid, sell_msg_id,
-        f'<tg-emoji emoji-id="{EMOJI_SELL}">📤</tg-emoji> <b>Срок размещения</b>\n\n'
+        f'<tg-emoji emoji-id="5274055917766202507">📤</tg-emoji> <b>Срок размещения</b>\n\n'
         f'<blockquote>'
-        f'Количество: <b>{amount:,.0f} Px</b>\n'
-        f'Цена лота: <b>${lot_price:.2f}</b>\n'
-        f'Вы получите (85%): <b>${earn:.2f}</b>'
+        f'<tg-emoji emoji-id="5325547803936572038">📤</tg-emoji>Количество: <b>{amount:,.0f} Px</b>\n'
+        f'<tg-emoji emoji-id="5427168083074628963">📤</tg-emoji>Цена лота: <b>${lot_price:.2f}</b>\n'
         f'</blockquote>\n\n'
-        f'<blockquote>Выберите срок размещения:</blockquote>',
+        f'<blockquote>Выберите срок размещения ниже:</blockquote>',
         _kb_duration(),
     )
     await state.update_data(sell_msg_id=new_mid)
@@ -606,13 +605,12 @@ async def cb_sell_duration(call: CallbackQuery, state: FSMContext):
     await state.set_state(SellStates.confirm)
 
     await call.message.edit_text(
-        f'<tg-emoji emoji-id="{EMOJI_SELL}">📤</tg-emoji> <b>Подтверждение продажи</b>\n\n'
+        f'<tg-emoji emoji-id="5456140674028019486">📤</tg-emoji> <b>Подтверждение продажи</b>\n\n'
         f'<blockquote>'
-        f'📦  Количество: <b>{amount:,.0f} Px</b>\n'
-        f'🏷  Цена лота: <b>${lot_price:.2f}</b>\n'
-        f'✅  Вы получите: <b>${earn:.2f}</b>\n'
-        f'⏳  Срок: <b>{days} дн.</b> (до {expire})\n\n'
-        f'⚠️  Px спишутся с баланса немедленно!'
+        f'<tg-emoji emoji-id="5325547803936572038">📤</tg-emoji>  Количество: <b>{amount:,.0f} Px</b>\n'
+        f'<tg-emoji emoji-id="5427168083074628963">📤</tg-emoji>  Цена лота: <b>${lot_price:.2f}</b>\n'
+        f'<tg-emoji emoji-id="5274055917766202507">📤</tg-emoji>  Срок: <b>{days} дн.</b> (до {expire})\n\n'
+        f'<tg-emoji emoji-id="5274099962655816924">📤</tg-emoji>  Px спишутся с баланса немедленно!'
         f'</blockquote>',
         reply_markup=_kb_confirm_sell(),
     )
@@ -645,7 +643,7 @@ async def cb_sell_confirm(call: CallbackQuery, state: FSMContext):
     active_count = db_count_active_listings_by_seller(uid)
     if active_count >= MAX_ACTIVE_LOTS:
         await call.message.edit_text(
-            f'<tg-emoji emoji-id="{EMOJI_WARN}">⚠️</tg-emoji> '
+            f'<tg-emoji emoji-id="5420323339723881652">⚠️</tg-emoji> '
             f'<b>Лимит активных лотов ({MAX_ACTIVE_LOTS}) достигнут!</b>',
             reply_markup=_kb_back_exchange(),
         )
@@ -654,7 +652,7 @@ async def cb_sell_confirm(call: CallbackQuery, state: FSMContext):
 
     if not db_try_spend_px(uid, amount):
         await call.message.edit_text(
-            f'<tg-emoji emoji-id="{EMOJI_WARN}">⚠️</tg-emoji> '
+            f'<tg-emoji emoji-id="5420323339723881652">⚠️</tg-emoji> '
             f'<b>Недостаточно Px на балансе!</b>',
             reply_markup=_kb_back_exchange(),
         )
@@ -673,9 +671,8 @@ async def cb_sell_confirm(call: CallbackQuery, state: FSMContext):
         f'<tg-emoji emoji-id="{EMOJI_SUCCESS}">✅</tg-emoji> <b>Лот создан!</b>\n\n'
         f'<blockquote>'
         f'🆔  ID: <code>#{listing_id}</code>\n'
-        f'📦  {amount:,.0f} Px за ${lot_price:.2f}\n'
-        f'💵  Получите после продажи: <b>${earn:.2f}</b>\n'
-        f'⏳  Активен {days} дней'
+        f'<tg-emoji emoji-id="5427168083074628963">⚠️</tg-emoji>  {amount:,.0f} Px за ${lot_price:.2f}\n'
+        f'<tg-emoji emoji-id="5456140674028019486">⚠️</tg-emoji>  Активен {days} дней'
         f'</blockquote>',
         reply_markup=_kb_back_exchange(),
     )
@@ -723,7 +720,7 @@ async def _show_buy_list(call: CallbackQuery, uid: int, page: int, range_idx: in
         text = (
             f'<tg-emoji emoji-id="{EMOJI_BUY}">💸</tg-emoji> <b>Покупка Px</b>\n\n'
             f'<blockquote>'
-            f'Диапазон: <b>{range_label}</b>\n\n'
+            f'<tg-emoji emoji-id="5231200819986047254">⚠️</tg-emoji>Диапазон: <b>{range_label}</b>\n\n'
             f'Лотов в этом диапазоне нет. Выберите другой!'
             f'</blockquote>'
         )
@@ -731,9 +728,9 @@ async def _show_buy_list(call: CallbackQuery, uid: int, page: int, range_idx: in
         text = (
             f'<tg-emoji emoji-id="{EMOJI_BUY}">💸</tg-emoji> <b>Покупка Px</b>\n\n'
             f'<blockquote>'
-            f'Диапазон: <b>{range_label}</b>\n'
+            f'<tg-emoji emoji-id="5231200819986047254">⚠️</tg-emoji>Диапазон: <b>{range_label}</b>\n'
             f'Лотов: <b>{len(all_lots)}</b>\n'
-            f'Страница: <b>{page + 1} / {total_pages}</b>\n\n'
+            f'<tg-emoji emoji-id="5282843764451195532">⚠️</tg-emoji>Страница: <b>{page + 1} / {total_pages}</b>\n\n'
             f'Нажмите на лот для подробностей:'
             f'</blockquote>'
         )
@@ -786,16 +783,16 @@ async def cb_lot_detail(call: CallbackQuery, state: FSMContext):
     expire    = datetime.fromisoformat(lot["expires_at"]).strftime("%d.%m.%Y")
 
     await call.message.edit_text(
-        f'<tg-emoji emoji-id="{EMOJI_BUY}">💸</tg-emoji> <b>Лот #{lot_id}</b>\n\n'
+        f'<tg-emoji emoji-id="5402186569006210455">💸</tg-emoji> <b>Лот #{lot_id}</b>\n\n'
         f'<blockquote>'
-        f'👤  Продавец: <b>@{lot["seller_name"]}</b>\n'
-        f'🏆  Продаж: <b>{stats["total_sales"]}</b>\n'
-        f'💵  Выручка продавца (итого): <b>${stats["total_earned"]:.2f}</b>'
+        f'<tg-emoji emoji-id="5906581476639513176">⚠️</tg-emoji>  Продавец: <b>@{lot["seller_name"]}</b>\n'
+        f'<tg-emoji emoji-id="5429518319243775957">⚠️</tg-emoji>  Продаж: <b>{stats["total_sales"]}</b>\n'
+        f'<tg-emoji emoji-id="5429651785352501917">⚠️</tg-emoji>  Выручка продавца (итого): <b>${stats["total_earned"]:.2f}</b>'
         f'</blockquote>\n\n'
         f'<blockquote>'
-        f'📦  Px: <b>{int(lot["px_amount"]):,} Px</b>\n'
-        f'🏷  <b>Цена лота: ${lot_price:.2f}</b>\n'
-        f'⏳  Активен до: {expire}'
+        f'<tg-emoji emoji-id="5400362079783770689">⚠️</tg-emoji>  Px: <b>{int(lot["px_amount"]):,} Px</b>\n'
+        f'<tg-emoji emoji-id="5427168083074628963">⚠️</tg-emoji>  <b>Цена лота: ${lot_price:.2f}</b>\n'
+        f'<tg-emoji emoji-id="5456140674028019486">⚠️</tg-emoji>  Активен до: {expire}'
         f'</blockquote>',
         reply_markup=_kb_lot_detail(lot_id, range_idx),
     )
