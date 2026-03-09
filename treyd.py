@@ -435,8 +435,7 @@ async def cb_sell_start(call: CallbackQuery, state: FSMContext):
     active_count = db_count_active_listings_by_seller(uid)
     if active_count >= MAX_ACTIVE_LOTS:
         await call.answer(
-            f"❌ Лимит: максимум {MAX_ACTIVE_LOTS} активных лотов!\n"
-            f"У вас сейчас: {active_count}",
+            f"❌ Лимит: максимум {MAX_ACTIVE_LOTS} активных лотов!",
             show_alert=True
         )
         return
@@ -446,10 +445,11 @@ async def cb_sell_start(call: CallbackQuery, state: FSMContext):
     await call.message.edit_text(
         f'<tg-emoji emoji-id="{EMOJI_SELL}">📤</tg-emoji> <b>Продажа Px</b>\n\n'
         f'<blockquote>'
-        f'Введите количество Px для продажи:\n\n'
-        f'Минимум: <b>{SELL_MIN_PX:,} Px</b>\n'
-        f'Максимум: <b>{SELL_MAX_PX:,} Px</b>\n\n'
-        f'Активных лотов у вас: <b>{active_count} / {MAX_ACTIVE_LOTS}</b>'
+        f'<b><tg-emoji emoji-id="5197269100878907942">💱</tg-emoji>Введите количество Px для продажи:</b>\n\n'
+        f'</blockquote>\n'
+        f'<blockquote>' 
+        f'<b><tg-emoji emoji-id="5447183459602669338">💱</tg-emoji>Минимум: {SELL_MIN_PX:,} Px</b>\n'
+        f'<b><tg-emoji emoji-id="5449683594425410231">💱</tg-emoji>Максимум: {SELL_MAX_PX:,} Px</b>\n\n'
         f'</blockquote>',
         reply_markup=_kb_cancel_sell(),
     )
