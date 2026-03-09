@@ -1250,13 +1250,34 @@ async def cmd_reck(message: Message, command: CommandObject):
 
 
 # ─────────────────────────────────────────
-#  Баланс + Дуэли — low_priority_router
+#  Баланс — вспомогательная функция
 # ─────────────────────────────────────────
 _BALANCE_WORDS = {
     "б", "b",
     "bal", "balance",
     "баланс", "бал", "балик",
 }
+
+
+async def _send_balance(message: Message):
+    uid = message.from_user.id
+    db_get_or_create_user(message.from_user)
+    user = db_get_user(uid)
+    if not user:
+        return
+    await message.reply(
+        f'<blockquote><tg-emoji emoji-id="{EMOJI_GOLD}">⚡</tg-emoji><b>Баланс:</b> <code>{user["px"]:,.2f} Px</code></blockquote>\n\n'
+        f'<blockquote>'
+        f'<tg-emoji emoji-id="5429651785352501917">⚡</tg-emoji>  <b>Выиграно всего:</b> <code>{user["total_won"]:,.2f} Px</code>\n'
+        f'<tg-emoji emoji-id="5429518319243775957">⚡</tg-emoji>  <b>Проиграно всего:</b> <code>{user["total_lost"]:,.2f} Px</code>'
+        f'</blockquote>'
+    )
+
+
+# /b  /б  /bal  /balance  /баланс  /бал  /балик
+@dp.message(Command("b", "б", "bal", "balance", "баланс", "бал", "балик"))
+async def cmd_balance_slash(message: Message):
+    await _send_balance(message)
 
 
 @low_priority_router.message(F.text)
@@ -1283,20 +1304,7 @@ async def cmd_low_priority_text(message: Message):
     if text.lower() not in _BALANCE_WORDS:
         return
 
-    uid = message.from_user.id
-    db_get_or_create_user(message.from_user)
-    user = db_get_user(uid)
-
-    if not user:
-        return
-
-    await message.reply(
-        f'<blockquote><tg-emoji emoji-id="{EMOJI_GOLD}">⚡</tg-emoji><b>Баланс:</b> <code>{user["px"]:,.2f} Px</code></blockquote>\n\n'
-        f'<blockquote>'
-        f'<tg-emoji emoji-id="5429651785352501917">⚡</tg-emoji>  <b>Выиграно всего:</b> <code>{user["total_won"]:,.2f} Px</code>\n'
-        f'<tg-emoji emoji-id="5429518319243775957">⚡</tg-emoji>  <b>Проиграно всего:</b> <code>{user["total_lost"]:,.2f} Px</code>'
-        f'</blockquote>'
-    )
+    await _send_balance(message)
 
 
 # ─────────────────────────────────────────
