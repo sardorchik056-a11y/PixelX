@@ -1000,17 +1000,6 @@ async def cmd_addcheck(message: Message):
     keyboard  = _check_keyboard(check_id)
     image_url = _get_check_image(amount)
 
-    # Сообщение админу с подтверждением
-    await message.answer(
-        f'<tg-emoji emoji-id="{EMOJI_GOLD}">💰</tg-emoji> <b>Чек создан!</b>\n\n'
-        f'<blockquote>'
-        f'<tg-emoji emoji-id="5429651785352501917">⚡</tg-emoji>  Сумма: <b>{amount:,.2f} Px</b>\n'
-        f'<tg-emoji emoji-id="5400362079783770689">⚡</tg-emoji>  Активаций: <b>{max_uses}</b>\n'
-        f'<tg-emoji emoji-id="5278467510604160626">⚡</tg-emoji>  ID: <code>{check_id}</code>'
-        f'</blockquote>\n\n'
-        f'<blockquote>👇 Чек ниже — перешлите его пользователям</blockquote>'
-    )
-
     # Отправляем сам чек (с картинкой если есть подходящая)
     if image_url:
         from aiogram.types import URLInputFile
