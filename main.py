@@ -21,6 +21,7 @@ import tower as _tower_module
 import mines as _mines_module
 import gold as _gold_module
 import treyd as _treyd_module
+import helper as _helper_module
 
 from mine import mine_router, mine_watchdog
 from referrals import referral_router
@@ -30,6 +31,7 @@ from tower import tower_router
 from mines import mines_router
 from gold import gold_router
 from treyd import exchange_router, exchange_watchdog
+from helper import helper_router
 
 from database import (
     init_db,
@@ -182,6 +184,7 @@ dp.include_router(tower_router)
 dp.include_router(mines_router)
 dp.include_router(gold_router)
 dp.include_router(exchange_router)   # ← Биржа
+dp.include_router(helper_router)
 
 low_priority_router = Router()
 
