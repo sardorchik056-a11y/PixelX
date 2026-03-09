@@ -831,7 +831,7 @@ async def cb_buy_lot(call: CallbackQuery, state: FSMContext):
     except Exception as e:
         logger.error("Invoice error: %s", e)
         await call.message.edit_text(
-            f'<tg-emoji emoji-id="{EMOJI_WARN}">⚠️</tg-emoji> '
+            f'<tg-emoji emoji-id="5420323339723881652">⚠️</tg-emoji> '
             f'<b>Ошибка создания счёта.</b> Попробуйте позже.',
             reply_markup=_kb_back_exchange(),
         )
@@ -849,13 +849,14 @@ async def cb_buy_lot(call: CallbackQuery, state: FSMContext):
     await call.message.edit_text(
         f'<tg-emoji emoji-id="{EMOJI_BUY}">💸</tg-emoji> <b>Оплата лота #{lot_id}</b>\n\n'
         f'<blockquote>'
-        f'📦  {int(lot["px_amount"]):,} Px\n'
-        f'💵  К оплате: <b>${lot_price:.2f}</b>\n\n'
+        f'<tg-emoji emoji-id="5427168083074628963">⚠️</tg-emoji>  {int(lot["px_amount"]):,} Px\n'
+        f'<tg-emoji emoji-id="5282843764451195532">⚠️</tg-emoji>  К оплате: <b>${lot_price:.2f}</b>\n\n'
         f'Нажмите кнопку и оплатите счёт.\n'
-        f'Счёт действителен <b>10 минут</b>.'
+        f'<tg-emoji emoji-id="5440621591387980068">⚠️</tg-emoji>Счёт действителен <b>10 минут</b>.'
         f'</blockquote>',
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="💳 Оплатить", url=pay_url)],
+            [InlineKeyboardButton(text="💳 Оплатить", url=pay_url, icon_custom_emoji_id=EMOJI_PAY
+                                 )],
             [InlineKeyboardButton(
                 text="Назад", callback_data="ex_buy_0_0", icon_custom_emoji_id=EMOJI_BACK
             )],
