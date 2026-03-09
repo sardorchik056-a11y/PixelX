@@ -125,6 +125,8 @@ EMOJI_BONUS       = "5305699699204837855"
 EMOJI_CHAT        = "5303138782004924588"
 EMOJI_NEWS        = "5201691993775818138"
 EMOJI_SUPPORT     = "5907025791006283345"
+EMOJI_ACTIV = "5271604874419647061"
+EMOJI_NEET = "5206607081334906820"
 
 # ─────────────────────────────────────────
 #  Owner guard
@@ -546,6 +548,173 @@ async def _activate_promo(uid: int, code: str) -> str:
 
 
 # ─────────────────────────────────────────
+#  Чеки — хранилище в памяти
+# ─────────────────────────────────────────
+import secrets
+
+_checks: dict[str, dict] = {}
+# check_id → {amount, max_uses, used_count, used_by: set, created_by}
+
+# Username бота — заполняется при старте для deeplink-кнопки
+_BOT_USERNAME: str = ""
+
+# Картинки для конкретных сумм (точное совпадение)
+_CHECK_IMAGES: dict[float, str] = {
+    500.0:  "https://i.postimg.cc/G9Vh9XxC/Chat-GPT-Image-8-mar-2026-g-15-11-13.png",
+    1000.0: "https://i.postimg.cc/7bdYbKn4/Chat-GPT-Image-8-mar-2026-g-15-10-51.png",
+    1250.0: "https://i.postimg.cc/8sjz12Wx/Chat-GPT-Image-8-mar-2026-g-15-13-51.png",
+    1500.0: "https://i.postimg.cc/t7wC7BNH/Chat-GPT-Image-8-mar-2026-g-15-13-03.png",
+}
+
+
+def _get_check_image(amount: float) -> str | None:
+    return _CHECK_IMAGES.get(amount)
+
+
+# ИЗМЕНЕНИЕ 1: кнопка — url-ссылка на бота (можно скопировать), не callback
+def _check_keyboard(check_id: str, exhausted: bool = False) -> InlineKeyboardMarkup:
+    if exhausted:
+        return InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(
+                text="Чек исчерпан",
+                callback_data="check_exhausted_info",
+                icon_custom_emoji_id=EMOJI_NEET,
+            )]
+        ])
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text="Активировать",
+            url=f"https://t.me/{_BOT_USERNAME}?start=check_{check_id}",
+            icon_custom_emoji_id=EMOJI_ACTIV,
+        )]
+    ])
+
+
+def _build_check_caption(check: dict) -> str:
+    amt      = check['amount']
+    left     = check['max_uses'] - check['used_count']
+    max_uses = check['max_uses']
+    return (
+        f'<tg-emoji emoji-id="5201691993775818138">💰</tg-emoji> <b>Чек на {amt:,.2f}Px </b>\n\n'
+    )
+
+
+@dp.message(Command("addcheck"))
+async def cmd_addcheck(message: Message):
+    uid = message.from_user.id
+
+    if uid not in ADMIN_IDS:
+        await message.answer("🚫 У вас нет доступа к этой команде!")
+        return
+
+    args = (message.text or "").split(maxsplit=2)[1:]
+
+    if len(args) != 2:
+        await message.answer(
+            f'<tg-emoji emoji-id="{EMOJI_GOLD}">💰</tg-emoji> <b>Неверный формат.</b>\n\n'
+            f'<blockquote>Использование:\n'
+            f'<code>/addcheck СУММА АКТИВАЦИИ</code>\n\n'
+            f'Пример:\n'
+            f'<code>/addcheck 1000 50</code></blockquote>'
+        )
+        return
+
+    amount_raw, uses_raw = args
+
+    try:
+        amount = float(amount_raw.replace(',', '.'))
+        if amount <= 0:
+            raise ValueError
+    except ValueError:
+        await message.answer("❌ Сумма должна быть положительным числом!")
+        return
+
+    try:
+        max_uses = int(uses_raw)
+        if max_uses <= 0:
+            raise ValueError
+    except ValueError:
+        await message.answer("❌ Количество активаций должно быть целым положительным числом!")
+        return
+
+    check_id = secrets.token_urlsafe(12)
+    _checks[check_id] = {
+        'amount':     amount,
+        'max_uses':   max_uses,
+        'used_count': 0,
+        'used_by':    set(),
+        'created_by': uid,
+    }
+
+    check     = _checks[check_id]
+    caption   = _build_check_caption(check)
+    keyboard  = _check_keyboard(check_id)
+    image_url = _get_check_image(amount)
+
+    if image_url:
+        from aiogram.types import URLInputFile
+        photo = URLInputFile(image_url)
+        await message.answer_photo(
+            photo=photo,
+            caption=caption,
+            reply_markup=keyboard,
+        )
+    else:
+        await message.answer(caption, reply_markup=keyboard)
+
+
+# ИЗМЕНЕНИЕ 2: ошибки "уже активировал" и "исчерпан" — сообщением в бот через /start deeplink
+async def _process_check_deeplink(message: Message, check_id: str):
+    uid   = message.from_user.id
+    check = _checks.get(check_id)
+
+    db_get_or_create_user(message.from_user)
+
+    if not check:
+        await message.answer(
+            f'<tg-emoji emoji-id="{EMOJI_NEET}">💰</tg-emoji> <b>Чек не найден!</b>\n\n'
+            f'<blockquote>Возможно, чек устарел или введён неверно.</blockquote>'
+        )
+        return
+
+    if uid in check['used_by']:
+        await message.answer(
+            f'<tg-emoji emoji-id="{EMOJI_NEET}">💰</tg-emoji> <b>Вы уже активировали этот чек!</b>\n\n'
+            f'<blockquote>'
+            f'<tg-emoji emoji-id="5429651785352501917">⚡</tg-emoji>  Сумма чека: <b>{check["amount"]:,.2f} Px</b>\n'
+            f'<tg-emoji emoji-id="5278467510604160626">⚡</tg-emoji>  Ваш баланс: <b>{db_get_px(uid):,.2f} Px</b>'
+            f'</blockquote>'
+        )
+        return
+
+    if check['used_count'] >= check['max_uses']:
+        await message.answer(
+            f'<tg-emoji emoji-id="{EMOJI_NEET}">💰</tg-emoji> <b>Чек уже исчерпан!</b>\n\n'
+            f'<blockquote>Все активации этого чека уже использованы.</blockquote>'
+        )
+        return
+
+    db_add_px(uid, check['amount'])
+    check['used_by'].add(uid)
+    check['used_count'] += 1
+
+    new_balance = db_get_px(uid)
+
+    await message.answer(
+        f'<tg-emoji emoji-id="{EMOJI_ACTIV}">💰</tg-emoji> <b>Чек активирован!</b>\n\n'
+        f'<blockquote>'
+        f'<tg-emoji emoji-id="5429651785352501917">⚡</tg-emoji>  Начислено: <b>+{check["amount"]:,.2f} Px</b>\n'
+        f'<tg-emoji emoji-id="5278467510604160626">⚡</tg-emoji>  Баланс: <b>{new_balance:,.2f} Px</b>'
+        f'</blockquote>'
+    )
+
+
+@dp.callback_query(F.data == "check_exhausted_info")
+async def cb_check_exhausted_info(call: CallbackQuery):
+    await call.answer("Все активации этого чека уже использованы.", show_alert=True)
+
+
+# ─────────────────────────────────────────
 #  /start
 # ─────────────────────────────────────────
 @dp.message(CommandStart())
@@ -560,13 +729,12 @@ async def cmd_start(message: Message, command: CommandObject, state: FSMContext)
     if command.args:
         args = command.args.strip()
 
-        # ── Активация чека через deeplink ──
+        # ИЗМЕНЕНИЕ 3: обработка deeplink чека в /start
         if args.startswith("check_"):
             check_id = args[6:]
             await _process_check_deeplink(message, check_id)
             return
 
-        # ── Реферальная ссылка ──
         if is_new and args.startswith("ref_"):
             inviter_part = args[4:]
             if inviter_part.isdigit():
@@ -899,181 +1067,6 @@ async def cmd_addpromo(message: Message):
             f'❌ Промокод <code>{code}</code> уже существует!\n'
             f'Выберите другой код!'
         )
-
-
-# ─────────────────────────────────────────
-#  Чеки — хранилище в памяти
-# ─────────────────────────────────────────
-import secrets
-
-_checks: dict[str, dict] = {}
-# check_id → {amount, max_uses, used_count, used_by: set, created_by}
-
-# Имя бота — подставляется при первом старте
-_BOT_USERNAME: str = ""
-
-# Картинки для конкретных сумм (точное совпадение)
-_CHECK_IMAGES: dict[float, str] = {
-    500.0:  "https://i.postimg.cc/G9Vh9XxC/Chat-GPT-Image-8-mar-2026-g-15-11-13.png",
-    1000.0: "https://i.postimg.cc/7bdYbKn4/Chat-GPT-Image-8-mar-2026-g-15-10-51.png",
-    1250.0: "https://i.postimg.cc/8sjz12Wx/Chat-GPT-Image-8-mar-2026-g-15-13-51.png",
-    1500.0: "https://i.postimg.cc/t7wC7BNH/Chat-GPT-Image-8-mar-2026-g-15-13-03.png",
-}
-
-
-def _get_check_image(amount: float) -> str | None:
-    return _CHECK_IMAGES.get(amount)
-
-
-def _check_url(check_id: str) -> str:
-    return f"https://t.me/{_BOT_USERNAME}?start=check_{check_id}"
-
-
-def _check_keyboard(check_id: str, exhausted: bool = False) -> InlineKeyboardMarkup:
-    if exhausted:
-        return InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(
-                text="Чек исчерпан",
-                callback_data="check_exhausted_info",
-                icon_custom_emoji_id=EMOJI_NEET,
-            )]
-        ])
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(
-            text="Активировать",
-            url=_check_url(check_id),
-            icon_custom_emoji_id=EMOJI_ACTIV,
-        )]
-    ])
-
-
-def _build_check_caption(check: dict) -> str:
-    amt      = check['amount']
-    left     = check['max_uses'] - check['used_count']
-    max_uses = check['max_uses']
-    return (
-        f'<tg-emoji emoji-id="5201691993775818138">💰</tg-emoji> <b>Чек на {amt:,.2f} Px</b>\n\n'
-        f'<blockquote>'
-        f'<tg-emoji emoji-id="5429651785352501917">⚡</tg-emoji>  <b>Активаций:</b> <code>{check["used_count"]}/{max_uses}</code>\n'
-        f'<tg-emoji emoji-id="5278467510604160626">⚡</tg-emoji>  <b>Осталось:</b> <code>{left}</code>'
-        f'</blockquote>'
-    )
-
-
-@dp.message(Command("addcheck"))
-async def cmd_addcheck(message: Message):
-    uid = message.from_user.id
-
-    if uid not in ADMIN_IDS:
-        await message.answer("🚫 У вас нет доступа к этой команде!")
-        return
-
-    args = (message.text or "").split(maxsplit=2)[1:]
-
-    if len(args) != 2:
-        await message.answer(
-            f'<tg-emoji emoji-id="{EMOJI_GOLD}">💰</tg-emoji> <b>Неверный формат.</b>\n\n'
-            f'<blockquote>Использование:\n'
-            f'<code>/addcheck СУММА АКТИВАЦИИ</code>\n\n'
-            f'Пример:\n'
-            f'<code>/addcheck 1000 50</code></blockquote>'
-        )
-        return
-
-    amount_raw, uses_raw = args
-
-    try:
-        amount = float(amount_raw.replace(',', '.'))
-        if amount <= 0:
-            raise ValueError
-    except ValueError:
-        await message.answer("❌ Сумма должна быть положительным числом!")
-        return
-
-    try:
-        max_uses = int(uses_raw)
-        if max_uses <= 0:
-            raise ValueError
-    except ValueError:
-        await message.answer("❌ Количество активаций должно быть целым положительным числом!")
-        return
-
-    check_id = secrets.token_urlsafe(12)
-    _checks[check_id] = {
-        'amount':     amount,
-        'max_uses':   max_uses,
-        'used_count': 0,
-        'used_by':    set(),
-        'created_by': uid,
-    }
-
-    check     = _checks[check_id]
-    caption   = _build_check_caption(check)
-    keyboard  = _check_keyboard(check_id)
-    image_url = _get_check_image(amount)
-
-    if image_url:
-        from aiogram.types import URLInputFile
-        photo = URLInputFile(image_url)
-        await message.answer_photo(photo=photo, caption=caption, reply_markup=keyboard)
-    else:
-        await message.answer(caption, reply_markup=keyboard)
-
-
-# ── Обработка /start check_XXXXX — активация чека через deeplink ──────────────
-async def _process_check_deeplink(message: Message, check_id: str):
-    uid   = message.from_user.id
-    check = _checks.get(check_id)
-
-    db_get_or_create_user(message.from_user)
-
-    if not check:
-        await message.answer(
-            f'<tg-emoji emoji-id="{EMOJI_NEET}">💰</tg-emoji> <b>Чек не найден!</b>\n\n'
-            f'<blockquote>Возможно, чек устарел или был введён неверно.</blockquote>'
-        )
-        return
-
-    if uid in check['used_by']:
-        await message.answer(
-            f'<tg-emoji emoji-id="{EMOJI_NEET}">💰</tg-emoji> <b>Вы уже активировали этот чек!</b>\n\n'
-            f'<blockquote>'
-            f'<tg-emoji emoji-id="5429651785352501917">⚡</tg-emoji>  Сумма: <b>{check["amount"]:,.2f} Px</b>\n'
-            f'<tg-emoji emoji-id="5278467510604160626">⚡</tg-emoji>  Баланс: <b>{db_get_px(uid):,.2f} Px</b>'
-            f'</blockquote>'
-        )
-        return
-
-    if check['used_count'] >= check['max_uses']:
-        await message.answer(
-            f'<tg-emoji emoji-id="{EMOJI_NEET}">💰</tg-emoji> <b>Чек уже исчерпан!</b>\n\n'
-            f'<blockquote>Все активации этого чека уже использованы.</blockquote>'
-        )
-        return
-
-    # Начисляем
-    db_add_px(uid, check['amount'])
-    check['used_by'].add(uid)
-    check['used_count'] += 1
-
-    new_balance = db_get_px(uid)
-
-    await message.answer(
-        f'<tg-emoji emoji-id="{EMOJI_ACTIV}">💰</tg-emoji> <b>Чек активирован!</b>\n\n'
-        f'<blockquote>'
-        f'<tg-emoji emoji-id="5429651785352501917">⚡</tg-emoji>  Начислено: <b>+{check["amount"]:,.2f} Px</b>\n'
-        f'<tg-emoji emoji-id="5278467510604160626">⚡</tg-emoji>  Баланс: <b>{new_balance:,.2f} Px</b>'
-        f'</blockquote>'
-    )
-
-    # Обновляем карточку чека если она есть
-    exhausted = (check['used_count'] >= check['max_uses'])
-    # (карточка обновится при следующей попытке — редактировать здесь нет message_id)
-
-
-@dp.callback_query(F.data == "check_exhausted_info")
-async def cb_check_exhausted_info(call: CallbackQuery):
-    await call.answer("Все активации этого чека уже использованы.", show_alert=True)
 
 
 # ─────────────────────────────────────────
