@@ -1039,11 +1039,15 @@ dp.include_router(game_low_router)
 #  Запуск
 # ─────────────────────────────────────────
 async def main():
+    # Удаляем webhook перед запуском polling
+    await bot.delete_webhook(drop_pending_updates=True)
+    print("✅ Webhook удален")
+    
     init_db()
-    init_exchange_db()                          # ← таблицы биржи
+    init_exchange_db()
     inject_to_modules(bot)
     asyncio.create_task(mine_watchdog())
-    asyncio.create_task(exchange_watchdog())    # ← возврат Px по истёкшим лотам
+    asyncio.create_task(exchange_watchdog())
     asyncio.create_task(_cleanup_task())
     print("✅ Бот запущен!")
     await dp.start_polling(bot)
