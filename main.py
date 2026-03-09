@@ -305,7 +305,7 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
         [
             InlineKeyboardButton(text="Промокоды", callback_data="promocodes", icon_custom_emoji_id=EMOJI_PROMO),
             InlineKeyboardButton(text="О проекте", callback_data="about",      icon_custom_emoji_id=EMOJI_ABOUT),
-            InlineKeyboardButton(text="Инструкция",url="https://t.me/REPLACE_INSTRUCTION_LINK", icon_custom_emoji_id=EMOJI_INSTRUCT),
+            InlineKeyboardButton(text="Инструкция",url="https://t.me/instruuct1on", icon_custom_emoji_id=EMOJI_INSTRUCT),
         ],
         [
             InlineKeyboardButton(text="Шахта",     callback_data="mine",       icon_custom_emoji_id=EMOJI_MINE),
