@@ -27,7 +27,13 @@ HELP_TEXT = (
     "</blockquote>\n"
 
     "<blockquote>"
-    "🎲 <b>ОБЫЧНЫЕ ИГРЫ</b>\n\n"
+    "💰 <b>ЗОЛОТО</b>\n"
+    "<code>/золото [сумма]</code>\n"
+    "Пример: <code>/Золото 1.5 </code>"
+    "</blockquote>\n"
+    
+    "<blockquote>"
+    "🎲 <b>ЭМОДЖИ ИГРЫ</b>\n\n"
     "🎲 Кубик\n"
     "<code>/куб [исход] [сумма]</code>\n"
     "Исходы: <code>больше</code> / <code>меньше</code> / <code>чёт</code> / <code>нечёт</code>\n\n"
@@ -58,7 +64,6 @@ HELP_TEXT = (
     '<tg-emoji emoji-id=\"5323442290708985472\">🎉</tg-emoji><b>БЫСТРЫЕ КОМАНДЫ</b>\n\n'
     "<code>b</code> / <code>bal</code> / <code>balance</code> — баланс\n"
     "<code>games</code> / <code>игры</code> — меню игр\n"
-    "<code>/bonus</code> — ежедневный бонус"
     "</blockquote>"
 )
 
