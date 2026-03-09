@@ -125,6 +125,8 @@ EMOJI_BONUS       = "5305699699204837855"
 EMOJI_CHAT        = "5303138782004924588"
 EMOJI_NEWS        = "5201691993775818138"
 EMOJI_SUPPORT     = "5907025791006283345"
+EMOJI_ACTIV = "5271604874419647061"
+EMOJI_NEET = "5206607081334906820"
 
 # ─────────────────────────────────────────
 #  Owner guard
@@ -921,14 +923,14 @@ def _check_keyboard(check_id: str, exhausted: bool = False) -> InlineKeyboardMar
             [InlineKeyboardButton(
                 text="Чек исчерпан",
                 callback_data="check_exhausted",
-                icon_custom_emoji_id=EMOJI_GOLD,
+                icon_custom_emoji_id=EMOJI_NEET,
             )]
         ])
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(
             text="Активировать",
             callback_data=f"check_activate:{check_id}",
-            icon_custom_emoji_id=EMOJI_GOLD,
+            icon_custom_emoji_id=EMOJI_ACTIV,
         )]
     ])
 
@@ -938,7 +940,7 @@ def _build_check_caption(check: dict) -> str:
     left     = check['max_uses'] - check['used_count']
     max_uses = check['max_uses']
     return (
-        f'<tg-emoji emoji-id="5201691993775818138">💰</tg-emoji> <b>Чек на <code>{amt:,.2f} Px</code> нажмите ниже для активации! </b>\n\n'
+        f'<tg-emoji emoji-id="5201691993775818138">💰</tg-emoji> <b>Чек на {amt:,.2f}Px </b>\n\n'
     )
 
 
