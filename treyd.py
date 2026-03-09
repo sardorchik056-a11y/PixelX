@@ -90,6 +90,7 @@ EMOJI_VIV = "5445355530111437729"
 EMOJI_TAKE = "5206607081334906820"
 EMOJI_REJECT = "5210952531676504517"
 EMOJI_PAY = "5271604874419647061"
+EMOJI_TAKEW = "5271604874419647061"
 
 # ── Инжектируемые зависимости ───────────────────────────────
 is_owner_fn  = lambda mid, uid: True
@@ -1439,7 +1440,11 @@ async def cmd_take(message: Message):
             f'Нажмите на кнопку ниже для получения чека:'
             f'</blockquote>',
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
-                InlineKeyboardButton(text="🎁 Получить чек", url=check_url)
+                InlineKeyboardButton(
+                   text="Получить чек", 
+                   url=check_url,
+                   icon_custom_emoji_id=EMOJI_TAKEW  
+                )
             ]]),
             parse_mode=ParseMode.HTML,
         )
