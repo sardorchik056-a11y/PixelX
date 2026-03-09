@@ -64,6 +64,7 @@ HELP_TEXT = (
     '<tg-emoji emoji-id=\"5323442290708985472\">🎉</tg-emoji><b>БЫСТРЫЕ КОМАНДЫ</b>\n\n'
     "<code>b</code> / <code>bal</code> / <code>balance</code> — баланс\n"
     "<code>games</code> / <code>игры</code> — меню игр\n"
+    "<code>/pay, /gift</code> — перевод Px"
     "</blockquote>"
 )
 
