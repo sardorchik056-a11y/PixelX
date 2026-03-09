@@ -89,6 +89,7 @@ EMOJI_SELL = "5447183459602669338"
 EMOJI_VIV = "5445355530111437729"
 EMOJI_TAKE = "5206607081334906820"
 EMOJI_REJECT = "5210952531676504517"
+EMOJI_PAY = "5271604874419647061"
 
 # ── Инжектируемые зависимости ───────────────────────────────
 is_owner_fn  = lambda mid, uid: True
@@ -855,12 +856,17 @@ async def cb_buy_lot(call: CallbackQuery, state: FSMContext):
         f'<tg-emoji emoji-id="5440621591387980068">⚠️</tg-emoji>Счёт действителен <b>10 минут</b>.'
         f'</blockquote>',
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="💳 Оплатить", url=pay_url, icon_custom_emoji_id=EMOJI_PAY
-                                 )],
             [InlineKeyboardButton(
-                text="Назад", callback_data="ex_buy_0_0", icon_custom_emoji_id=EMOJI_BACK
+                text="💳 Оплатить", 
+                url=pay_url, 
+                icon_custom_emoji_id=EMOJI_PAY
             )],
-        ]),
+            [InlineKeyboardButton(
+                text="Назад", 
+                callback_data="ex_buy_0_0", 
+                icon_custom_emoji_id=EMOJI_BACK
+            )],
+         ]),
     )
     set_owner_fn(call.message.message_id, uid)
     await call.answer()
