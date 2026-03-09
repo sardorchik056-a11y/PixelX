@@ -848,16 +848,15 @@ async def cb_buy_lot(call: CallbackQuery, state: FSMContext):
     )
 
     await call.message.edit_text(
-        f'<tg-emoji emoji-id="{EMOJI_BUY}">💸</tg-emoji> <b>Оплата лота #{lot_id}</b>\n\n'
+        f'<tg-emoji emoji-id="5402186569006210455">💸</tg-emoji> <b>Оплата лота #{lot_id}</b>\n\n'
         f'<blockquote>'
         f'<tg-emoji emoji-id="5427168083074628963">⚠️</tg-emoji>  {int(lot["px_amount"]):,} Px\n'
         f'<tg-emoji emoji-id="5282843764451195532">⚠️</tg-emoji>  К оплате: <b>${lot_price:.2f}</b>\n\n'
-        f'Нажмите кнопку и оплатите счёт.\n'
         f'<tg-emoji emoji-id="5440621591387980068">⚠️</tg-emoji>Счёт действителен <b>10 минут</b>.'
         f'</blockquote>',
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(
-                text="💳 Оплатить", 
+                text="Оплатить", 
                 url=pay_url, 
                 icon_custom_emoji_id=EMOJI_PAY
             )],
@@ -925,12 +924,7 @@ async def _poll_invoice(
                 await _bot_ref.send_message(
                     lot["seller_id"],
                     f'<tg-emoji emoji-id="{EMOJI_SUCCESS}">✅</tg-emoji> '
-                    f'<b>Лот #{lot_id} куплен!</b>\n\n'
-                    f'<blockquote>'
-                    f'👤  Покупатель: @{buyer_name}\n'
-                    f'📦  Продано: {int(lot["px_amount"]):,} Px\n'
-                    f'💵  Зачислено: <b>${seller_earn:.2f}</b>'
-                    f'</blockquote>',
+                    f'<b>Лот #{lot_id} куплен! пользователем @{buyer_name} </b>',
                     parse_mode=ParseMode.HTML,
                 )
             except Exception:
@@ -941,11 +935,7 @@ async def _poll_invoice(
                     chat_id=chat_id, message_id=msg_id,
                     text=(
                         f'<tg-emoji emoji-id="{EMOJI_SUCCESS}">✅</tg-emoji> '
-                        f'<b>Покупка успешна!</b>\n\n'
-                        f'<blockquote>'
-                        f'📦  Зачислено: <b>{int(lot["px_amount"]):,} Px</b>\n'
-                        f'💵  Оплачено: ${total_usd:.2f}'
-                        f'</blockquote>'
+                        f'<b>Успешная покупка!</b>'
                     ),
                     reply_markup=_kb_back_exchange(),
                     parse_mode=ParseMode.HTML,
@@ -960,8 +950,8 @@ async def _poll_invoice(
     try:
         await _bot_ref.send_message(
             chat_id,
-            f'<tg-emoji emoji-id="{EMOJI_WARN}">⚠️</tg-emoji> '
-            f'<b>Время оплаты истекло.</b> Счёт для лота #{lot_id} аннулирован.',
+            f'<tg-emoji emoji-id="5420323339723881652">⚠️</tg-emoji> '
+            f'<b><tg-emoji emoji-id="5440621591387980068">⚠️</tg-emoji>Время оплаты истекло!</b> Счёт для лота #{lot_id} аннулирован!',
             parse_mode=ParseMode.HTML,
         )
     except Exception:
@@ -988,7 +978,7 @@ async def cb_my_lots(call: CallbackQuery, state: FSMContext):
     if not lots:
         text = (
             f'<tg-emoji emoji-id="{EMOJI_STATS}">📊</tg-emoji> <b>Мои лоты</b>\n\n'
-            f'<blockquote>У вас нет активных лотов.\nЛимит: {MAX_ACTIVE_LOTS} лотов</blockquote>'
+            f'<blockquote>У вас нет активных лотов!</blockquote>'
         )
         await call.message.edit_text(
             text,
@@ -1002,8 +992,8 @@ async def cb_my_lots(call: CallbackQuery, state: FSMContext):
         text = (
             f'<tg-emoji emoji-id="{EMOJI_STATS}">📊</tg-emoji> <b>Мои лоты</b>\n\n'
             f'<blockquote>'
-            f'Активных: <b>{len(lots)} / {MAX_ACTIVE_LOTS}</b>\n'
-            f'Страница: <b>{page + 1} / {total_pages}</b>\n\n'
+            f'<tg-emoji emoji-id="5456140674028019486">⚠️</tg-emoji>Активных: <b>{len(lots)} / {MAX_ACTIVE_LOTS}</b>\n'
+            f'<tg-emoji emoji-id="5282843764451195532">⚠️</tg-emoji>Страница: <b>{page + 1} / {total_pages}</b>\n\n'
             f'Нажмите на лот для управления:'
             f'</blockquote>'
         )
@@ -1034,14 +1024,14 @@ async def cb_my_lot_detail(call: CallbackQuery, state: FSMContext):
     await call.message.edit_text(
         f'<tg-emoji emoji-id="{EMOJI_STATS}">📊</tg-emoji> <b>Лот #{lot_id}</b>\n\n'
         f'<blockquote>'
-        f'📦  Количество: <b>{int(lot["px_amount"]):,} Px</b>\n'
-        f'🏷  Цена лота: <b>${lot_price:.2f}</b>\n'
-        f'⏳  Активен до: {expire}'
+        f'<tg-emoji emoji-id="5427168083074628963">⚠️</tg-emoji>  Количество: <b>{int(lot["px_amount"]):,} Px</b>\n'
+        f'<tg-emoji emoji-id="5197434882321567830">⚠️</tg-emoji>  Цена лота: <b>${lot_price:.2f}</b>\n'
+        f'<tg-emoji emoji-id="5382194935057372936">⚠️</tg-emoji>  Активен до: {expire}'
         f'</blockquote>\n\n'
         f'<blockquote>'
-        f'⚠️  При отмене — штраф <b>5%</b>:\n'
-        f'🔙  Возврат: <b>{int(refund):,} Px</b>\n'
-        f'💸  Штраф: <b>{int(lot["px_amount"] - refund):,} Px</b>'
+        f'<tg-emoji emoji-id="5420323339723881652">⚠️</tg-emoji>  При отмене — штраф <b>5%</b>:\n'
+        f'<tg-emoji emoji-id="5402186569006210455">⚠️</tg-emoji>  Возврат: <b>{int(refund):,} Px</b>\n'
+        f'<tg-emoji emoji-id="5440660757194744323">⚠️</tg-emoji>  Штраф: <b>{int(lot["px_amount"] - refund):,} Px</b>'
         f'</blockquote>',
         reply_markup=_kb_my_lot_detail(lot_id),
     )
@@ -1065,10 +1055,10 @@ async def cb_cancel_lot_ask(call: CallbackQuery, state: FSMContext):
 
     refund = round(lot["px_amount"] * (1 - COMMISSION_CANCEL))
     await call.message.edit_text(
-        f'<tg-emoji emoji-id="{EMOJI_WARN}">⚠️</tg-emoji> <b>Подтвердите отмену</b>\n\n'
+        f'<tg-emoji emoji-id="5420323339723881652">⚠️</tg-emoji> <b>Подтвердите отмену</b>\n\n'
         f'<blockquote>'
-        f'Лот <b>#{lot_id}</b> будет удалён.\n'
-        f'Вам вернётся <b>{int(refund):,} Px</b> (штраф 5%).\n\n'
+        f'<tg-emoji emoji-id="5458603043203327669">⚠️</tg-emoji>Лот <b>#{lot_id}</b> будет удалён.\n'
+        f'<tg-emoji emoji-id="5402186569006210455">⚠️</tg-emoji>Вам вернётся <b>{int(refund):,} Px</b> (штраф 5%).\n\n'
         f'Вы уверены?'
         f'</blockquote>',
         reply_markup=_kb_confirm_cancel_lot(lot_id),
@@ -1102,8 +1092,8 @@ async def cb_cancel_lot_confirm(call: CallbackQuery, state: FSMContext):
     await call.message.edit_text(
         f'<tg-emoji emoji-id="{EMOJI_SUCCESS}">✅</tg-emoji> <b>Лот #{lot_id} отменён</b>\n\n'
         f'<blockquote>'
-        f'🔙  Возвращено: <b>{int(refund):,} Px</b>\n'
-        f'💸  Удержан штраф: <b>{int(lot["px_amount"] - refund):,} Px</b>'
+        f'<tg-emoji emoji-id="5402186569006210455">⚠️</tg-emoji>  Возвращено: <b>{int(refund):,} Px</b>\n'
+        f'<tg-emoji emoji-id="5440660757194744323">⚠️</tg-emoji>  Удержан штраф: <b>{int(lot["px_amount"] - refund):,} Px</b>'
         f'</blockquote>',
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
             InlineKeyboardButton(
@@ -1128,13 +1118,13 @@ async def cb_withdraw(call: CallbackQuery, state: FSMContext):
     await state.set_state(WithdrawStates.waiting_amount)
     await state.update_data(withdraw_msg_id=call.message.message_id)
     await call.message.edit_text(
-        f'<tg-emoji emoji-id="{EMOJI_WITHDRAW}">🏦</tg-emoji> <b>Вывод средств</b>\n\n'
+        f'<tg-emoji emoji-id="5445355530111437729">🏦</tg-emoji> <b>Вывод средств</b>\n\n'
         f'<blockquote>'
-        f'💵  Баланс $: <b>${bal:.2f}</b>\n\n'
+        f'<tg-emoji emoji-id="5197434882321567830">⚠️</tg-emoji>  Баланс $: <b>${bal:.2f}</b>\n\n'
         f'Введите сумму для вывода:\n'
-        f'Минимум: <b>${WITHDRAW_MIN_USD:.2f}</b>\n'
-        f'Комиссия: <b>3%</b>\n\n'
-        f'⏳ Выплата после одобрения админом'
+        f'<tg-emoji emoji-id="5429518319243775957">⚠️</tg-emoji>Минимум: <b>${WITHDRAW_MIN_USD:.2f}</b>\n'
+        f'<tg-emoji emoji-id="5294167145079395967">⚠️</tg-emoji>Комиссия: <b>3%</b>\n\n'
+        f'<tg-emoji emoji-id="5420323339723881652">⚠️</tg-emoji> Выплата после одобрения админом!'
         f'</blockquote>',
         reply_markup=_kb_cancel_withdraw(),
     )
@@ -1166,7 +1156,7 @@ async def handle_withdraw_amount(message: Message, state: FSMContext):
 
     if amount < WITHDRAW_MIN_USD:
         await _err(
-            f'<tg-emoji emoji-id="{EMOJI_WARN}">⚠️</tg-emoji> '
+            f'<tg-emoji emoji-id="5420323339723881652">⚠️</tg-emoji> '
             f'<b>Минимум ${WITHDRAW_MIN_USD:.2f}!</b>\n\nВведите сумму:'
         )
         return
@@ -1174,7 +1164,7 @@ async def handle_withdraw_amount(message: Message, state: FSMContext):
     bal = db_get_usd_balance(uid)
     if amount > bal:
         await _err(
-            f'<tg-emoji emoji-id="{EMOJI_WARN}">⚠️</tg-emoji> '
+            f'<tg-emoji emoji-id="5420323339723881652">⚠️</tg-emoji> '
             f'<b>Недостаточно средств!</b>\n'
             f'Баланс: <b>${bal:.2f}</b>\n\nВведите сумму:'
         )
@@ -1186,13 +1176,13 @@ async def handle_withdraw_amount(message: Message, state: FSMContext):
 
     new_mid = await _edit_or_send(
         uid, withdraw_msg_id,
-        f'<tg-emoji emoji-id="{EMOJI_WITHDRAW}">🏦</tg-emoji> <b>Подтверждение заявки</b>\n\n'
+        f'<tg-emoji emoji-id="5444856076954520455">🏦</tg-emoji> <b>Подтверждение заявки</b>\n\n'
         f'<blockquote>'
-        f'💵  Выводите: <b>${amount:.2f}</b>\n'
-        f'📉  Комиссия (3%): <b>${amount * COMMISSION_WITHDRAW:.2f}</b>\n'
-        f'✅  К получению: <b>${net:.2f}</b>\n\n'
-        f'⏳  Заявка будет одобрена администратором.\n'
-        f'После одобрения придёт чек CryptoBot (USDT).'
+        f'<tg-emoji emoji-id="5427168083074628963">⚠️</tg-emoji>  Выводите: <b>${amount:.2f}</b>\n'
+        f'<tg-emoji emoji-id="5294167145079395967">⚠️</tg-emoji>  Комиссия (3%): <b>${amount * COMMISSION_WITHDRAW:.2f}</b>\n'
+        f'<tg-emoji emoji-id="5201691993775818138">⚠️</tg-emoji>  К получению: <b>${net:.2f}</b>\n\n'
+        f'<tg-emoji emoji-id="5420323339723881652">⚠️</tg-emoji>  Заявка будет одобрена администратором!\n'
+        f'После одобрения придёт чек <tg-emoji emoji-id="5427054176246991778">⚠️</tg-emoji>CryptoBot!.'
         f'</blockquote>',
         _kb_confirm_withdraw(),
     )
@@ -1233,10 +1223,10 @@ async def cb_withdraw_confirm(call: CallbackQuery, state: FSMContext):
         f'<tg-emoji emoji-id="{EMOJI_SUCCESS}">✅</tg-emoji> <b>Заявка подана!</b>\n\n'
         f'<blockquote>'
         f'🆔  Заявка: <code>#{req_id}</code>\n'
-        f'💵  Сумма: <b>${amount:.2f}</b>\n'
-        f'✅  К получению: <b>${net:.2f}</b>\n\n'
-        f'⏳  Ожидайте одобрения администратора.\n'
-        f'После одобрения вам придёт чек CryptoBot.'
+        f'<tg-emoji emoji-id="5197434882321567830">⚠️</tg-emoji>  Сумма: <b>${amount:.2f}</b>\n'
+        f'<tg-emoji emoji-id="5201691993775818138">⚠️</tg-emoji>  К получению: <b>${net:.2f}</b>\n\n'
+        f'<tg-emoji emoji-id="5382194935057372936">⚠️</tg-emoji>  Ожидайте одобрения администратора.\n'
+        f'После одобрения вам придёт чек <tg-emoji emoji-id="5427054176246991778">⚠️</tg-emoji>CryptoBot!'
         f'</blockquote>',
         reply_markup=_kb_back_exchange(),
     )
@@ -1444,8 +1434,8 @@ async def cmd_take(message: Message):
             f'<tg-emoji emoji-id="{EMOJI_SUCCESS}">✅</tg-emoji> '
             f'<b>Вывод #{req_id} одобрен!</b>\n\n'
             f'<blockquote>'
-            f'💵  Списано: <b>${req["amount_usd"]:.2f}</b>\n'
-            f'✅  К получению: <b>${req["net_usd"]:.2f}</b>\n\n'
+            f'<tg-emoji emoji-id="5429518319243775957">⚠️</tg-emoji>  Списано: <b>${req["amount_usd"]:.2f}</b>\n'
+            f'<tg-emoji emoji-id="5201691993775818138">⚠️</tg-emoji>  К получению: <b>${req["net_usd"]:.2f}</b>\n\n'
             f'Нажмите на кнопку ниже для получения чека:'
             f'</blockquote>',
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
