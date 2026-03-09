@@ -237,8 +237,8 @@ def _duel_card_text(duel: dict, *, extra: str = "") -> str:
         f"<blockquote>"
         f'{emoji}<b>{name}</b>\n'
         f'<tg-emoji emoji-id="5400362079783770689">🎯</tg-emoji> <b>{n} {_throws_word(n)}</b>\n'
-        f'<tg-emoji emoji-id="5197434882321567830">💰</tg-emoji> Ставка: <b><code>{amt:.2f}</code> × 2</b>\n'
-        f'<tg-emoji emoji-id="5278467510604160626">🏆</tg-emoji> Приз: <b><code>{prize:.2f}</code><tg-emoji emoji-id="5197434882321567830">💰</tg-emoji></b>\n'
+        f'<tg-emoji emoji-id="5330320040883411678">💰</tg-emoji> Ставка: <b><code>{amt:.2f}</code>Px</b>\n'
+        f'<tg-emoji emoji-id="5278467510604160626">🏆</tg-emoji> Приз: <b><code>{prize:.2f}</code>Px</b>\n'
         f'<tg-emoji emoji-id="5906581476639513176">👤</tg-emoji> <b>{p1t}</b>  vs  <tg-emoji emoji-id="5906581476639513176">👤</tg-emoji> <b>{p2t}</b>'
         f"</blockquote>"
     )
@@ -352,7 +352,7 @@ async def _activity_timeout(duel_id: str):
                     chat_id=pid,
                     text=(
                         f"⚔️ Дуэль против {opponent_tag} закрыта!\n"
-                        f'<tg-emoji emoji-id="5197434882321567830">👤</tg-emoji> Ставка <code>{amount:.2f}</code> возвращена!'
+                        f'<tg-emoji emoji-id="5197434882321567830">👤</tg-emoji> Ставка <code>{amount:.2f}</code>Px возвращена!'
                     ),
                     parse_mode=ParseMode.HTML
                 )
@@ -378,7 +378,7 @@ async def _activity_timeout(duel_id: str):
             f"<blockquote>"
             f" {p1t}: {p1_det} = <b>{p1sum}</b>\n"
             f" {p2t}: {p2_det} = <b>{p2sum}</b>\n\n"
-            f'<tg-emoji emoji-id="5197434882321567830">👤</tg-emoji> Выигрыш: <code>+{prize:.2f}</code>\n'
+            f'<tg-emoji emoji-id="5427168083074628963">👤</tg-emoji> Выигрыш: <code>+{prize:.2f}Px</code>PX\n'
             f" {winner_tag} побеждает {loser_tag}!"
             f"</blockquote>"
         )
@@ -392,7 +392,7 @@ async def _activity_timeout(duel_id: str):
             f"<blockquote>"
             f" {p1t}: {p1_det} = <b>{p1sum}</b>\n"
             f" {p2t}: {p2_det} = <b>{p2sum}</b>\n\n"
-            f'<tg-emoji emoji-id="5197434882321567830">👤</tg-emoji> Выигрыш: <code>+{prize:.2f}</code>\n'
+            f'<tg-emoji emoji-id="5427168083074628963">👤</tg-emoji> Выигрыш: <code>+{prize:.2f}Px</code>\n'
             f" {winner_tag} побеждает {loser_tag}!"
             f"</blockquote>"
         )
@@ -407,7 +407,7 @@ async def _activity_timeout(duel_id: str):
             f"<blockquote>"
             f" {p1t}: {p1_det} = <b>{p1sum}</b>\n"
             f" {p2t}: {p2_det} = <b>{p2sum}</b>\n\n"
-            f'<tg-emoji emoji-id="5402186569006210455">👤</tg-emoji>Возврат: по <code>{refund:.2f}</code><tg-emoji emoji-id="5197434882321567830">👤</tg-emoji>каждому\n'
+            f'<tg-emoji emoji-id="5402186569006210455">👤</tg-emoji>Возврат: по <code>{refund:.2f}Px</code>каждому\n'
             f"</blockquote>"
         )
         logging.info(f"[Duels] {duel_id} таймаут-ничья, возврат {refund}")
@@ -678,7 +678,7 @@ async def _finish_duel(duel_id: str, trigger_msg: Message) -> None:
             f"<blockquote>"
             f" {p1t}: {p1_det} = <b>{p1sum}</b>\n"
             f" {p2t}: {p2_det} = <b>{p2sum}</b>\n\n"
-            f'<tg-emoji emoji-id="5197434882321567830">👤</tg-emoji> Выигрыш: <code>+{prize:.2f}</code>\n'
+            f'<tg-emoji emoji-id="5427168083074628963">👤</tg-emoji> Выигрыш: <code>+{prize:.2f}Px</code>\n'
             f" {winner_tag} побеждает {loser_tag}!"
             f"</blockquote>"
         )
@@ -693,7 +693,7 @@ async def _finish_duel(duel_id: str, trigger_msg: Message) -> None:
             f"<blockquote>"
             f" {p1t}: {p1_det} = <b>{p1sum}</b>\n"
             f" {p2t}: {p2_det} = <b>{p2sum}</b>\n\n"
-            f'<tg-emoji emoji-id="5197434882321567830">👤</tg-emoji> Выигрыш: <code>+{prize:.2f}</code>\n'
+            f'<tg-emoji emoji-id="5427168083074628963">👤</tg-emoji> Выигрыш: <code>+{prize:.2f}Px</code>\n'
             f" {winner_tag} побеждает {loser_tag}!"
             f"</blockquote>"
         )
@@ -709,7 +709,7 @@ async def _finish_duel(duel_id: str, trigger_msg: Message) -> None:
             f"<blockquote>"
             f" {p1t}: {p1_det} = <b>{p1sum}</b>\n"
             f" {p2t}: {p2_det} = <b>{p2sum}</b>\n\n"
-            f'<tg-emoji emoji-id="5402186569006210455">👤</tg-emoji>Возврат: по <code>{refund:.2f}</code><tg-emoji emoji-id="5197434882321567830">👤</tg-emoji>каждому\n'
+            f'<tg-emoji emoji-id="5402186569006210455">👤</tg-emoji>Возврат: по <code>{refund:.2f}Px</code>каждому\n'
             f"</blockquote>"
         )
         logging.info(f"[Duels] {duel_id} ничья. Каждый получил {refund} (с комиссией 5%)")
