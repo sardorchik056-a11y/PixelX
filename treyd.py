@@ -1475,15 +1475,13 @@ async def cmd_reject(message: Message):
         await message.answer(f'❌ Заявка <b>#{req_id}</b> не найдена или уже обработана.')
         return
 
-    db_add_usd(req["user_id"], req["amount_usd"])
-
     try:
         await _bot_ref.send_message(
             req["user_id"],
-            f'<tg-emoji emoji-id="{EMOJI_WARN}">⚠️</tg-emoji> '
+            f'<tg-emoji emoji-id="5420323339723881652">⚠️</tg-emoji> '
             f'<b>Заявка на вывод #{req_id} отклонена</b>\n\n'
             f'<blockquote>'
-            f'💵  Возвращено на баланс: <b>${req["amount_usd"]:.2f}</b>'
+            f'<tg-emoji emoji-id="5427168083074628963">⚠️</tg-emoji>  Сумма <b>${req["amount_usd"]:.2f}</b> аннулирована.'
             f'</blockquote>',
             parse_mode=ParseMode.HTML,
         )
@@ -1491,11 +1489,11 @@ async def cmd_reject(message: Message):
         pass
 
     await message.answer(
-        f'<tg-emoji emoji-id="{EMOJI_WARN}">⚠️</tg-emoji> '
+        f'<tg-emoji emoji-id="5420323339723881652">⚠️</tg-emoji> '
         f'<b>Заявка #{req_id} отклонена.</b>\n\n'
         f'<blockquote>'
         f'👤 @{req["username"]}\n'
-        f'💵 ${req["amount_usd"]:.2f} возвращено на баланс пользователя.'
+        f'💵 ${req["amount_usd"]:.2f} — аннулировано.'
         f'</blockquote>'
     )
 
@@ -1513,11 +1511,11 @@ async def exchange_watchdog():
                 try:
                     await _bot_ref.send_message(
                         lot["seller_id"],
-                        f'<tg-emoji emoji-id="{EMOJI_WARN}">⚠️</tg-emoji> '
+                        f'<tg-emoji emoji-id="5420323339723881652">⚠️</tg-emoji> '
                         f'<b>Лот #{lot["id"]} истёк!</b>\n\n'
                         f'<blockquote>'
-                        f'Срок действия лота закончился.\n'
-                        f'📦  Возвращено: <b>{int(lot["px_amount"]):,} Px</b>'
+                        f'<tg-emoji emoji-id="5440621591387980068">⚠️</tg-emoji>Срок действия лота закончился.\n'
+                        f'<tg-emoji emoji-id="5251203410396458957">⚠️</tg-emoji>  Возвращено: <b>{int(lot["px_amount"]):,} Px</b>'
                         f'</blockquote>',
                         parse_mode=ParseMode.HTML,
                     )
