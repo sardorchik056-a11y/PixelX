@@ -1122,7 +1122,7 @@ async def cb_withdraw(call: CallbackQuery, state: FSMContext):
         f'<tg-emoji emoji-id="5445355530111437729">🏦</tg-emoji> <b>Вывод средств</b>\n\n'
         f'<blockquote>'
         f'<tg-emoji emoji-id="5197434882321567830">⚠️</tg-emoji>  Баланс $: <b>${bal:.2f}</b>\n\n'
-        f'Введите сумму для вывода:\n'
+        f'<tg-emoji emoji-id="5197269100878907942">⚠️</tg-emoji>Введите сумму для вывода:\n'
         f'<tg-emoji emoji-id="5429518319243775957">⚠️</tg-emoji>Минимум: <b>${WITHDRAW_MIN_USD:.2f}</b>\n'
         f'<tg-emoji emoji-id="5294167145079395967">⚠️</tg-emoji>Комиссия: <b>3%</b>\n\n'
         f'<tg-emoji emoji-id="5420323339723881652">⚠️</tg-emoji> Выплата после одобрения админом!'
