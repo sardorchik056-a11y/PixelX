@@ -343,12 +343,12 @@ def profile_keyboard() -> InlineKeyboardMarkup:
 def about_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text="Чат",        url="https://t.me/REPLACE_CHAT_LINK",        icon_custom_emoji_id=EMOJI_CHAT),
-            InlineKeyboardButton(text="Новости",    url="https://t.me/REPLACE_NEWS_LINK",        icon_custom_emoji_id=EMOJI_NEWS),
-            InlineKeyboardButton(text="Поддержка",  url="https://t.me/REPLACE_SUPPORT_LINK",     icon_custom_emoji_id=EMOJI_SUPPORT),
+            InlineKeyboardButton(text="Чат",        url="https://t.me/chatp1x",        icon_custom_emoji_id=EMOJI_CHAT),
+            InlineKeyboardButton(text="Новости",    url="https://t.me/pixelxch",        icon_custom_emoji_id=EMOJI_NEWS),
+            InlineKeyboardButton(text="Поддержка",  url="https://t.me/Xyloth_1337",     icon_custom_emoji_id=EMOJI_SUPPORT),
         ],
         [
-            InlineKeyboardButton(text="Инструкция", url="https://t.me/REPLACE_INSTRUCTION_LINK", icon_custom_emoji_id=EMOJI_INSTRUCT),
+            InlineKeyboardButton(text="Инструкция", url="https://t.me/instruuct1on", icon_custom_emoji_id=EMOJI_INSTRUCT),
         ],
         [
             InlineKeyboardButton(text="Назад", callback_data="main_menu", icon_custom_emoji_id=EMOJI_BACK),
