@@ -130,7 +130,7 @@ def sub_keyboard(unsubscribed: list[dict]) -> InlineKeyboardMarkup:
             url=ch["invite_link"],
         )])
     rows.append([InlineKeyboardButton(
-        text="✅ Я подписался — проверить",
+        text="проверить",
         callback_data="sub_check",
     )])
     return InlineKeyboardMarkup(inline_keyboard=rows)
@@ -145,10 +145,10 @@ def sub_text(unsubscribed: list[dict]) -> str:
     return (
         f'<tg-emoji emoji-id="{EMOJI_LOCK}">🔒</tg-emoji> <b>Доступ ограничен</b>\n\n'
         f'<blockquote>'
-        f'Для использования бота необходимо подписаться на следующие каналы:\n\n'
+        f'<tg-emoji emoji-id="5397916757333654639">🔒</tg-emoji>Подпишитесь наканлы ниже!\n\n'
         f'{names}'
         f'</blockquote>\n\n'
         f'<blockquote>'
-        f'После подписки нажмите кнопку <b>«Я подписался — проверить»</b>'
+        f'После подписки нажмите кнопку <b>«проверить»</b>'
         f'</blockquote>'
     )
