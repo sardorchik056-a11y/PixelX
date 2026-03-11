@@ -26,6 +26,7 @@ _db_try_spend_px  = None
 _db_get_or_create = None
 _db_save_result   = None
 _db_get_last      = None
+_db_update_stats  = None
 is_owner_fn       = None
 set_owner_fn      = None
 
@@ -35,12 +36,13 @@ def set_bot_ref(bot) -> None:
     _bot = bot
 
 
-def set_db_fns(get_px, add_px, try_spend_px, get_or_create) -> None:
-    global _db_get_px, _db_add_px, _db_try_spend_px, _db_get_or_create
+def set_db_fns(get_px, add_px, try_spend_px, get_or_create, update_stats=None) -> None:
+    global _db_get_px, _db_add_px, _db_try_spend_px, _db_get_or_create, _db_update_stats
     _db_get_px        = get_px
     _db_add_px        = add_px
     _db_try_spend_px  = try_spend_px
     _db_get_or_create = get_or_create
+    _db_update_stats  = update_stats
 
 
 def set_db_log_fns(save_result_fn, get_last_fn) -> None:
@@ -365,10 +367,22 @@ async def _execute_game(chat_id: int) -> None:
                     _db_add_px(uid, payout)
                 except Exception as e:
                     log.error("_execute_game: db_add_px failed uid=%s: %s", uid, e)
+                # ── Статистика: победа ──
+                if _db_update_stats:
+                    try:
+                        _db_update_stats(uid, won=profit, lost=0.0)
+                    except Exception as e:
+                        log.error("_execute_game: update_stats win failed uid=%s: %s", uid, e)
                 win_lines.append(
                     f'<blockquote> {link}  |  {label}  |  <b>+{profit:,.2f} Px</b></blockquote>'
                 )
             else:
+                # ── Статистика: проигрыш ──
+                if _db_update_stats:
+                    try:
+                        _db_update_stats(uid, won=0.0, lost=amt)
+                    except Exception as e:
+                        log.error("_execute_game: update_stats lose failed uid=%s: %s", uid, e)
                 lose_lines.append(
                     f'<blockquote> {link}  |  {label}  |  <b>-{amt:,.2f} Px</b></blockquote>'
                 )
@@ -515,6 +529,59 @@ async def _place_bet(message: Message, amount: float, new_bets: list) -> None:
 
 
 # ─────────────────────────────────────────
+#  Отмена ставок игрока
+# ─────────────────────────────────────────
+async def _cancel_bets(message: Message) -> None:
+    uid     = message.from_user.id
+    chat_id = message.chat.id
+    game    = _get_game(chat_id)
+
+    if game["running"]:
+        await message.reply(
+            "⏳ <b>Игра уже идёт — отмена невозможна!</b>",
+            parse_mode=ParseMode.HTML,
+        )
+        return
+
+    player_bets = [b for b in game["bets"] if b["uid"] == uid]
+
+    if not player_bets:
+        await message.reply(
+            '<tg-emoji emoji-id="5429518319243775957">🎟</tg-emoji> <b>У вас нет активных ставок.</b>',
+            parse_mode=ParseMode.HTML,
+        )
+        return
+
+    # Считаем сумму возврата
+    refund_total = round(sum(b["amount"] for b in player_bets), 2)
+
+    # Удаляем ставки игрока из списка
+    game["bets"] = [b for b in game["bets"] if b["uid"] != uid]
+
+    # Возвращаем деньги
+    try:
+        _db_add_px(uid, refund_total)
+    except Exception as e:
+        log.error("_cancel_bets: db_add_px failed uid=%s: %s", uid, e)
+
+    # Если ставок в раунде больше нет — отменяем автозапуск
+    if not game["bets"]:
+        _cancel_auto(chat_id)
+        game["first_bet_time"] = None
+
+    link = _user_link(uid, message.from_user.username, message.from_user.first_name or "?")
+
+    await message.reply(
+        f'<tg-emoji emoji-id="5429518319243775957">🎟</tg-emoji> <b>Ставки отменены!</b>\n\n'
+        f'<blockquote>'
+        f'{link}  |  Отменено ставок: <b>{len(player_bets)}</b>\n'
+        f'<tg-emoji emoji-id="5206607081334906820">🎟</tg-emoji>  Возврат: <b>+{refund_total:,.2f} Px</b>'
+        f'</blockquote>',
+        parse_mode=ParseMode.HTML,
+    )
+
+
+# ─────────────────────────────────────────
 #  /r и /рул — команды со слешем
 # ─────────────────────────────────────────
 @roulette_router.message(Command("r", "рул"))
@@ -533,7 +600,8 @@ async def cmd_r(message: Message) -> None:
             "<code>100 чет</code>         — чётное (×1.9)\n"
             "<code>100 нечет</code>       — нечётное (×1.9)\n\n"
             "<code>го</code>              — запустить игру\n"
-            "<code>лог</code>             — последние 10 результатов\n\n"
+            "<code>лог</code>             — последние 10 результатов\n"
+            "<code>отмена / cancel</code> — отменить свои ставки\n\n"
             f'Лимит: <tg-emoji emoji-id="5420323339723881652">🎟</tg-emoji><b>{MAX_BETS_PER_PLAYER}</b> ставок на игрока!  |  '
             f'<tg-emoji emoji-id="5420323339723881652">🎟</tg-emoji><b>{MAX_BETS_TOTAL}</b> ставок в раунде'
             "</blockquote>",
@@ -551,6 +619,14 @@ async def cmd_r(message: Message) -> None:
 
     amount, new_bets = parsed
     await _place_bet(message, amount, new_bets)
+
+
+# ─────────────────────────────────────────
+#  /отмена и /cancel — команды со слешем
+# ─────────────────────────────────────────
+@roulette_router.message(Command("отмена", "cancel"))
+async def cmd_cancel_slash(message: Message) -> None:
+    await _cancel_bets(message)
 
 
 # ─────────────────────────────────────────
@@ -646,4 +722,13 @@ def is_roulette_log(text: str) -> bool:
 
 async def handle_roulette_log(message: Message) -> bool:
     await _send_log(message)
+    return True
+
+
+def is_roulette_cancel(text: str) -> bool:
+    return text.strip().lower() in ("отмена", "cancel")
+
+
+async def handle_roulette_cancel(message: Message) -> bool:
+    await _cancel_bets(message)
     return True
