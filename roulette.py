@@ -1,24 +1,22 @@
 """
 roulette.py — Игра «Рулетка» для PixelX-бота
-=============================================
 
-БЕЗ СЛЕША — работают текстовые команды:
-  100 7          — ставка 100 на число 7         (×35)
-  100 5-3-22     — ставки по 100 на числа 5,3,22 (×35 каждое)
-  100 к          — ставка 100 на красное          (×1.9)
-  100 ч          — ставка 100 на чёрное           (×1.9)
-  100 чет        — ставка 100 на чётное           (×1.9)
-  100 нечет      — ставка 100 на нечётное         (×1.9)
-  го             — запустить игру (только участник со ставкой)
-  /rlog          — последние 10 игр
+Ставки без слеша:
+  100 7          — число 7 (×35)
+  100 5-3-22     — числа 5,3,22 (×35 каждое)
+  100 к          — красное (×1.9)
+  100 ч          — чёрное  (×1.9)
+  100 чет        — чётное  (×1.9)
+  100 нечет      — нечётное(×1.9)
 
-Автозапуск через 2 минуты если никто не написал «го».
-Максимум 20 ставок на раунд.
+  го / /го       — запуск (только участник, не раньше чем через 15 сек после первой ставки)
+  лог / /rlog    — последние 10 результатов
 """
 
 import asyncio
 import re
 import random
+import time
 from aiogram import Router
 from aiogram.types import Message
 from aiogram.filters import Command
@@ -27,7 +25,7 @@ from aiogram.enums import ParseMode
 roulette_router = Router()
 
 # ─────────────────────────────────────────
-#  Injected references (заполняются из main.py)
+#  Injected references
 # ─────────────────────────────────────────
 _bot              = None
 _db_get_px        = None
@@ -63,7 +61,8 @@ def set_db_log_fns(save_result_fn, get_last_fn) -> None:
 #  Константы
 # ─────────────────────────────────────────
 MAX_BETS_PER_GAME = 20
-AUTO_START_DELAY  = 120    # 2 минуты ожидания перед автозапуском
+AUTO_START_DELAY  = 120   # автозапуск через 2 минуты если никто не написал го
+GO_COOLDOWN       = 15    # нельзя нажать «го» раньше чем через 15 сек после первой ставки
 BET_MIN           = 1
 BET_MAX           = 1_000_000
 
@@ -75,7 +74,6 @@ RED_NUMBERS   = frozenset({1, 3, 5, 7, 9, 12, 14, 16, 18,
 BLACK_NUMBERS = frozenset({2, 4, 6, 8, 10, 11, 13, 15, 17,
                             20, 22, 24, 26, 28, 29, 31, 33, 35})
 
-# замени file_id для 11/27 и 32/33 сам — они дублируются в исходных данных
 ROULETTE_STICKERS: dict[int, tuple[str, str]] = {
     0:  ("green", "CAACAgIAAxkBAAIGwmmxFg5jCcqad0pAyUvPy7r_JZ6DAAIxcQACwY-oS-C0sJmfrQEJOgQ"),
     1:  ("red",   "CAACAgIAAxkBAAIHImmxFm5HHmsAAsdeaDd6LUqjQJDyBNgACYm0AAsV_qUvwV2I-O_92MzoE"),
@@ -118,6 +116,11 @@ ROULETTE_STICKERS: dict[int, tuple[str, str]] = {
 
 # ─────────────────────────────────────────
 #  Состояние игры (по chat_id)
+#  game = {
+#    "bets":       list[dict],
+#    "running":    bool,
+#    "first_bet_time": float | None   — monotonic time первой ставки раунда
+#  }
 # ─────────────────────────────────────────
 _games:        dict[int, dict]         = {}
 _game_history: dict[int, list[dict]]   = {}
@@ -126,7 +129,7 @@ _auto_tasks:   dict[int, asyncio.Task] = {}
 
 def _get_game(chat_id: int) -> dict:
     if chat_id not in _games:
-        _games[chat_id] = {"bets": [], "running": False}
+        _games[chat_id] = {"bets": [], "running": False, "first_bet_time": None}
     return _games[chat_id]
 
 
@@ -195,7 +198,7 @@ def _user_link(uid: int, username, fname: str) -> str:
 
 
 # ─────────────────────────────────────────
-#  Парсер ставки из произвольного текста
+#  Парсер ставки из текста
 # ─────────────────────────────────────────
 _BET_RE = re.compile(r"^(\d+(?:[.,]\d+)?)\s+(.+)$", re.IGNORECASE | re.UNICODE)
 
@@ -207,7 +210,7 @@ _BLACK_WORDS = {"ч", "черное", "чёрное", "black", "чер"}
 
 def _parse_bet(text: str):
     """
-    Парсит текст вида '100 7' или '500 к' или '200 5-17-32'.
+    Парсит '100 7' / '500 к' / '200 5-17-32'.
     Возвращает (amount: float, bets: list[tuple]) или None.
     """
     m = _BET_RE.match(text.strip())
@@ -254,7 +257,7 @@ def _parse_bet(text: str):
 
 
 # ─────────────────────────────────────────
-#  Автозапуск (2 минуты)
+#  Автозапуск (2 минуты без «го»)
 # ─────────────────────────────────────────
 async def _auto_start_coro(chat_id: int) -> None:
     try:
@@ -275,7 +278,6 @@ async def _auto_start_coro(chat_id: int) -> None:
 
 
 def _schedule_auto(chat_id: int) -> None:
-    """Запустить таймер автозапуска ТОЛЬКО если он ещё не идёт."""
     existing = _auto_tasks.get(chat_id)
     if existing is None or existing.done():
         _auto_tasks[chat_id] = asyncio.create_task(_auto_start_coro(chat_id))
@@ -295,7 +297,8 @@ async def _execute_game(chat_id: int) -> None:
     if game["running"] or not game["bets"]:
         return
 
-    game["running"] = True
+    game["running"]        = True
+    game["first_bet_time"] = None   # сброс таймера
     _cancel_auto(chat_id)
 
     bets = game["bets"][:]
@@ -331,9 +334,13 @@ async def _execute_game(chat_id: int) -> None:
                 payout = round(amt * _mult(bt), 2)
                 profit = round(payout - amt, 2)
                 _db_add_px(uid, payout)
-                win_lines.append(f"✅ {link}  |  {label}  |  <b>+{profit:,.2f} Px</b>")
+                win_lines.append(
+                    f"✅ {link}  |  {label}  |  <b>+{profit:,.2f} Px</b>"
+                )
             else:
-                lose_lines.append(f"❌ {link}  |  {label}  |  <b>-{amt:,.2f} Px</b>")
+                lose_lines.append(
+                    f"❌ {link}  |  {label}  |  <b>-{amt:,.2f} Px</b>"
+                )
 
         if win_lines:
             lines.append("<b>Победители:</b>")
@@ -433,25 +440,25 @@ async def _place_bet(message: Message, amount: float, new_bets: list) -> None:
             "bet_value":  bv,
         })
 
+    # Фиксируем время первой ставки раунда
+    if first_bet:
+        game["first_bet_time"] = time.monotonic()
+        _schedule_auto(chat_id)
+
     conf_lines: list[str] = ["🎰 <b>Ставки приняты!</b>\n"]
     for bt, bv in new_bets:
         conf_lines.append(f"<b>{amount:,.2f} Px</b> — {_bet_label(bt, bv)}")
 
     total_now = len(game["bets"])
-    mins      = AUTO_START_DELAY // 60
     conf_lines.append(
         f"\n<blockquote>"
         f"Ставок в раунде: <b>{total_now}/{MAX_BETS_PER_GAME}</b>\n"
-        f"Напиши <b>го</b> для немедленного старта\n"
-        f"Автозапуск через <b>{mins} мин.</b> если никто не напишет го"
+        f"Напиши <b>го</b> для старта (доступно через {GO_COOLDOWN} сек.)\n"
+        f"Автозапуск через <b>2 мин.</b> если никто не напишет го"
         f"</blockquote>"
     )
 
     await message.reply("\n".join(conf_lines), parse_mode=ParseMode.HTML)
-
-    # Запускаем таймер только при ПЕРВОЙ ставке раунда
-    if first_bet:
-        _schedule_auto(chat_id)
 
 
 # ─────────────────────────────────────────
@@ -465,13 +472,15 @@ async def cmd_r(message: Message) -> None:
         await message.reply(
             "🎰 <b>Рулетка</b>\n\n"
             "<blockquote>"
-            "Слеш не нужен! Пишите прямо:\n"
+            "Слеш не нужен! Пишите прямо в чат:\n"
             "<code>100 7</code>        — число 7 (×35)\n"
             "<code>100 5-17-32</code>  — числа 5, 17, 32 (×35 каждое)\n"
             "<code>100 к</code>        — красное (×1.9)\n"
             "<code>100 ч</code>        — чёрное (×1.9)\n"
             "<code>100 чет</code>      — чётное (×1.9)\n"
-            "<code>100 нечет</code>    — нечётное (×1.9)\n"
+            "<code>100 нечет</code>    — нечётное (×1.9)\n\n"
+            "<code>го</code>           — запустить игру\n"
+            "<code>лог</code>          — последние 10 результатов"
             "</blockquote>",
             parse_mode=ParseMode.HTML,
         )
@@ -491,10 +500,9 @@ async def cmd_r(message: Message) -> None:
 
 
 # ─────────────────────────────────────────
-#  /rlog — история последних 10 игр
+#  лог / /rlog / /рлог — история
 # ─────────────────────────────────────────
-@roulette_router.message(Command("rlog", "рлог"))
-async def cmd_rlog(message: Message) -> None:
+async def _send_log(message: Message) -> None:
     chat_id = message.chat.id
     history = _get_history(chat_id)
 
@@ -519,13 +527,18 @@ async def cmd_rlog(message: Message) -> None:
     for entry in reversed(history):
         n  = entry["number"]
         ce = _ce(entry["color"])
-        lines.append(f"{ce} {n}")
+        lines.append(f"{ce} <b>{n}</b>")
 
     await message.reply("\n".join(lines), parse_mode=ParseMode.HTML)
 
 
+@roulette_router.message(Command("rlog", "рлог", "лог"))
+async def cmd_rlog(message: Message) -> None:
+    await _send_log(message)
+
+
 # ─────────────────────────────────────────
-#  Функции для low_priority_router в main.py
+#  Публичные функции для low_priority_router
 # ─────────────────────────────────────────
 
 def is_roulette_go(text: str) -> bool:
@@ -534,18 +547,35 @@ def is_roulette_go(text: str) -> bool:
 
 async def handle_roulette_go(message: Message) -> bool:
     """
-    Запускает рулетку если пользователь — участник со ставкой.
-    Возвращает True если стартовали, False — молча игнорируем.
+    Запускает рулетку.
+    — Молча игнорирует если нет ставок или пользователь не участник.
+    — Отвечает с таймером если не прошло GO_COOLDOWN секунд.
+    Возвращает True если ответил пользователю (в т.ч. сообщением «подождите»).
     """
     chat_id = message.chat.id
     uid     = message.from_user.id
     game    = _get_game(chat_id)
 
-    if game["running"] or not game["bets"]:
+    # нет ставок вообще — молчим
+    if not game["bets"] or game["running"]:
         return False
 
+    # пользователь не участник — молчим
     if not any(b["uid"] == uid for b in game["bets"]):
         return False
+
+    # проверка кулдауна 15 сек
+    first_bet_time = game.get("first_bet_time")
+    if first_bet_time is not None:
+        elapsed = time.monotonic() - first_bet_time
+        remaining = GO_COOLDOWN - elapsed
+        if remaining > 0:
+            secs = int(remaining) + 1
+            await message.reply(
+                f"⏳ Подождите ещё <b>{secs} сек.</b> перед запуском!",
+                parse_mode=ParseMode.HTML,
+            )
+            return True   # ответили — возвращаем True чтобы не падало в другие хендлеры
 
     _cancel_auto(chat_id)
     await _execute_game(chat_id)
@@ -553,20 +583,23 @@ async def handle_roulette_go(message: Message) -> bool:
 
 
 def is_roulette_bet(text: str) -> bool:
-    """True если текст — ставка рулетки (без слеша)."""
     return _parse_bet(text) is not None
 
 
 async def handle_roulette_bet(message: Message) -> bool:
-    """
-    Обрабатывает текстовую ставку без слеша.
-    Возвращает True если текст распознан как ставка.
-    """
     text   = (message.text or "").strip()
     parsed = _parse_bet(text)
     if parsed is None:
         return False
-
     amount, new_bets = parsed
     await _place_bet(message, amount, new_bets)
+    return True
+
+
+def is_roulette_log(text: str) -> bool:
+    return text.strip().lower() in ("лог", "log")
+
+
+async def handle_roulette_log(message: Message) -> bool:
+    await _send_log(message)
     return True
