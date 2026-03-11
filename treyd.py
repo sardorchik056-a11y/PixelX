@@ -443,7 +443,11 @@ async def cb_sell_start(call: CallbackQuery, state: FSMContext):
         return
 
     await state.set_state(SellStates.waiting_amount)
-    await state.update_data(sell_msg_id=call.message.message_id)
+    await state.update_data(
+        sell_msg_id=call.message.message_id,
+        sell_chat_id=call.message.chat.id,
+        sell_group_msg_id=call.message.message_id,
+    )
     await call.message.edit_text(
         f'<tg-emoji emoji-id="{EMOJI_SELL}">📤</tg-emoji> <b>Продажа Px</b>\n\n'
         f'<blockquote>'
@@ -475,14 +479,14 @@ async def handle_sell_amount(message: Message, state: FSMContext):
     except ValueError:
         return
 
-    # Удаляем сообщение бота с просьбой ввести сумму из чата
-    if sell_msg_id:
+    # Удаляем сообщение бота из группы/чата (то самое "Введите количество Px")
+    sell_chat_id      = data.get("sell_chat_id")
+    sell_group_msg_id = data.get("sell_group_msg_id")
+    if sell_chat_id and sell_group_msg_id:
         try:
-            await _bot_ref.delete_message(chat_id=uid, message_id=sell_msg_id)
+            await _bot_ref.delete_message(chat_id=sell_chat_id, message_id=sell_group_msg_id)
         except Exception:
             pass
-        sell_msg_id = None
-        await state.update_data(sell_msg_id=None)
 
     async def _err(text: str):
         new_mid = await _edit_or_send(uid, sell_msg_id, text, _kb_cancel_sell())
