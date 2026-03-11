@@ -84,6 +84,16 @@ def init_db():
                 used_at       TEXT    NOT NULL,
                 PRIMARY KEY (code, uid)
             );
+
+            CREATE TABLE IF NOT EXISTS roulette_log (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                chat_id       INTEGER NOT NULL,
+                result_number INTEGER NOT NULL,
+                result_color  TEXT    NOT NULL,
+                played_at     TEXT    NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_roulette_log_chat ON roulette_log(chat_id);
         """)
     print("✅ БД инициализирована")
 
@@ -253,6 +263,7 @@ def _row_to_mine(row: dict) -> dict:
 # ─────────────────────────────────────────
 REFERRAL_REWARD_PX = 1000
 
+
 def db_register_referral(invitee_id: int, inviter_id: int) -> bool:
     if invitee_id == inviter_id:
         return False
@@ -331,7 +342,6 @@ def db_is_already_referred(uid: int) -> bool:
 #  Промокоды
 # ─────────────────────────────────────────
 def db_create_promo(code: str, reward: float, max_uses: int) -> bool:
-    """Создать промокод. Возвращает False если такой код уже существует."""
     now = datetime.now().isoformat()
     with get_conn() as conn:
         existing = conn.execute(
@@ -347,13 +357,6 @@ def db_create_promo(code: str, reward: float, max_uses: int) -> bool:
 
 
 def db_use_promo(uid: int, code: str) -> dict:
-    """
-    Попытка активировать промокод пользователем.
-    Возвращает dict:
-      ok:     bool
-      reason: 'not_found' | 'expired' | 'already_used' | None
-      reward: float
-    """
     code = code.strip().upper()
     with get_conn() as conn:
         promo = conn.execute(
@@ -386,3 +389,32 @@ def db_use_promo(uid: int, code: str) -> dict:
             (promo["reward"], uid)
         )
         return {"ok": True, "reason": None, "reward": float(promo["reward"])}
+
+
+# ─────────────────────────────────────────
+#  Рулетка — лог в БД
+#  (история также хранится в памяти в roulette.py,
+#   эти функции нужны для персистентности между перезапусками)
+# ─────────────────────────────────────────
+def db_roulette_save_result(chat_id: int, number: int, color: str) -> None:
+    """Сохранить результат раунда рулетки в БД."""
+    now = datetime.now().isoformat()
+    with get_conn() as conn:
+        conn.execute("""
+            INSERT INTO roulette_log (chat_id, result_number, result_color, played_at)
+            VALUES (?, ?, ?, ?)
+        """, (chat_id, number, color, now))
+
+
+def db_roulette_get_last(chat_id: int, limit: int = 10) -> list[dict]:
+    """Получить последние N результатов рулетки для чата."""
+    with get_conn() as conn:
+        rows = conn.execute("""
+            SELECT result_number, result_color, played_at
+            FROM roulette_log
+            WHERE chat_id = ?
+            ORDER BY id DESC
+            LIMIT ?
+        """, (chat_id, limit)).fetchall()
+    return [{"number": r["result_number"], "color": r["result_color"],
+             "played_at": r["played_at"]} for r in rows]
