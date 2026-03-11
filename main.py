@@ -49,6 +49,7 @@ from roulette import (
     handle_roulette_go, is_roulette_go,
     handle_roulette_bet, is_roulette_bet,
     handle_roulette_log, is_roulette_log,
+    handle_roulette_cancel, is_roulette_cancel,
 )
 
 from database import (
@@ -67,6 +68,7 @@ from database import (
     REFERRAL_REWARD_PX,
     db_create_promo,
     db_use_promo,
+    db_update_game_stats,
 )
 from treyd_db import init_exchange_db
 
@@ -213,6 +215,7 @@ def inject_to_modules(bot: Bot):
         db_add_px,
         db_try_spend_px,
         db_get_or_create_user,
+        db_update_game_stats,
     )
     _roulette_module.set_db_log_fns(
         db_roulette_save_result,
@@ -764,8 +767,6 @@ async def cb_check_exhausted_info(call: CallbackQuery):
 
 # ─────────────────────────────────────────
 #  /addchannel — добавить обязательный канал (только для админов)
-#  Использование: /addchannel https://t.me/channel_username
-#  Бот должен быть администратором в этом канале!
 # ─────────────────────────────────────────
 @dp.message(Command("addchannel"))
 async def cmd_addchannel(message: Message):
@@ -789,12 +790,10 @@ async def cmd_addchannel(message: Message):
 
     raw = args[0].strip()
 
-    # Определяем channel_id: числовой ID или username из ссылки
     if raw.lstrip('-').isdigit():
         channel_id = int(raw)
         lookup     = str(channel_id)
     else:
-        # Извлекаем username из ссылки вида https://t.me/xxx или @xxx
         username = raw.replace("https://t.me/", "").replace("http://t.me/", "").lstrip("@").strip("/")
         if not username:
             await message.answer("❌ Не удалось определить канал из ссылки!")
@@ -802,7 +801,6 @@ async def cmd_addchannel(message: Message):
         lookup     = f"@{username}"
         channel_id = lookup
 
-    # Пробуем получить инфо о канале через Telegram API
     try:
         chat = await bot.get_chat(channel_id)
     except Exception as e:
@@ -815,7 +813,6 @@ async def cmd_addchannel(message: Message):
         )
         return
 
-    # Проверяем что бот является администратором
     try:
         bot_member = await bot.get_chat_member(chat.id, (await bot.get_me()).id)
         if bot_member.status not in ("administrator", "creator"):
@@ -828,7 +825,6 @@ async def cmd_addchannel(message: Message):
         await message.answer(f'❌ Ошибка проверки прав бота: <code>{e}</code>')
         return
 
-    # Формируем invite link
     invite_link = chat.invite_link or f"https://t.me/{chat.username}" if chat.username else raw
     title       = chat.title or str(chat.id)
 
@@ -851,9 +847,7 @@ async def cmd_addchannel(message: Message):
 
 
 # ─────────────────────────────────────────
-#  /delchannel — удалить обязательный канал (только для админов)
-#  Использование: /delchannel https://t.me/channel_username
-#             или /delchannel -1001234567890
+#  /delchannel — удалить обязательный канал
 # ─────────────────────────────────────────
 @dp.message(Command("delchannel"))
 async def cmd_delchannel(message: Message):
@@ -874,7 +868,6 @@ async def cmd_delchannel(message: Message):
         return
 
     if not args:
-        # Показываем список всех каналов с ID для удобного копирования
         lines = "\n".join(
             f'• <b>{ch["title"]}</b> — <code>{ch["id"]}</code>'
             for ch in channels
@@ -888,12 +881,10 @@ async def cmd_delchannel(message: Message):
 
     raw = args[0].strip()
 
-    # Определяем channel_id
     if raw.lstrip('-').isdigit():
         target_id = str(int(raw))
     else:
         username = raw.replace("https://t.me/", "").replace("http://t.me/", "").lstrip("@").strip("/")
-        # Пробуем найти по username в списке
         target_id = None
         for ch in channels:
             cid = str(ch["id"])
@@ -901,7 +892,6 @@ async def cmd_delchannel(message: Message):
                 target_id = cid
                 break
         if not target_id:
-            # Попробуем получить chat_id через API
             try:
                 chat = await bot.get_chat(f"@{username}")
                 target_id = str(chat.id)
@@ -927,7 +917,7 @@ async def cmd_delchannel(message: Message):
 
 
 # ─────────────────────────────────────────
-#  /channels — показать список (только для админов)
+#  /channels — показать список
 # ─────────────────────────────────────────
 @dp.message(Command("channels"))
 async def cmd_channels(message: Message):
@@ -956,21 +946,11 @@ async def cmd_channels(message: Message):
 
 # ─────────────────────────────────────────
 #  Словарь ожидающих реферальных наград
-#  invitee_uid -> inviter_uid
-#  Живёт в памяти — этого достаточно, т.к.
-#  пользователь обычно подписывается в том же сеансе.
-#  db_try_reward_referral() идемпотентна — дважды не начислит.
 # ─────────────────────────────────────────
 _pending_referrals: dict[int, int] = {}
 
 
 async def _try_reward_referral_and_notify(invitee_uid: int) -> None:
-    """
-    Пытается начислить реферальную награду по данным из БД.
-    Уведомляет инвайтера если награда выдана.
-    Вызывается только после подтверждения подписки.
-    db_try_reward_referral() сама проверяет — была ли уже выдана награда.
-    """
     inviter_id = _pending_referrals.pop(invitee_uid, None)
     rewarded   = db_try_reward_referral(invitee_uid)
 
@@ -1002,13 +982,11 @@ async def cmd_start(message: Message, command: CommandObject, state: FSMContext)
     if command.args:
         args = command.args.strip()
 
-        # ── Чек ── (не требует подписки)
         if args.startswith("check_"):
             check_id = args[6:]
             await _process_check_deeplink(message, check_id)
             return
 
-        # ── Реферал ── регистрируем связь в БД; награду — после подписки
         if is_new and args.startswith("ref_"):
             inviter_part = args[4:]
             if inviter_part.isdigit():
@@ -1016,19 +994,14 @@ async def cmd_start(message: Message, command: CommandObject, state: FSMContext)
                 if inviter_id != uid and not db_is_already_referred(uid):
                     registered = db_register_referral(invitee_id=uid, inviter_id=inviter_id)
                     if registered:
-                        # Запоминаем в словаре — НЕ в FSM-стейте,
-                        # чтобы данные не терялись при state.clear()
                         _pending_referrals[uid] = inviter_id
 
-    # ── Проверяем подписку ──
     ok, unsub = await check_subscribed(bot, uid)
     if not ok:
         sent = await message.answer(sub_text(unsub), reply_markup=sub_keyboard(unsub))
         set_owner(sent.message_id, uid)
         return
 
-    # ── Подписан — пробуем начислить реферальную награду ──
-    # db_try_reward_referral идемпотентна: если уже начислено — ничего не произойдёт
     await _try_reward_referral_and_notify(uid)
 
     sent = await message.answer(MAIN_TEXT, reply_markup=main_menu_keyboard())
@@ -1051,9 +1024,6 @@ async def cb_sub_check(call: CallbackQuery, state: FSMContext):
             pass
         return
 
-    # Подписан — пробуем начислить реферальную награду.
-    # Если у пользователя нет записи в _pending_referrals и нет
-    # неначисленного реферала в БД — функция просто ничего не сделает.
     await _try_reward_referral_and_notify(uid)
 
     await call.message.edit_text(MAIN_TEXT, reply_markup=main_menu_keyboard())
@@ -1170,7 +1140,6 @@ async def handle_promo_input(message: Message, state: FSMContext):
     except Exception:
         pass
 
-    # Проверяем подписку даже в FSM-состоянии
     ok, unsub = await check_subscribed(bot, uid)
     if not ok:
         await state.clear()
@@ -1269,7 +1238,6 @@ async def _handle_transfer(message: Message, amount_str: str):
     if target_user.is_bot:
         return
 
-    # Проверяем подписку отправителя
     if not await _require_sub_message(message):
         return
 
@@ -1621,6 +1589,13 @@ async def cmd_balance_slash(message: Message):
 @low_priority_router.message(F.text)
 async def cmd_low_priority_text(message: Message):
     text = (message.text or "").strip()
+
+    # ── Рулетка: отмена ставок ──
+    if is_roulette_cancel(text):
+        if not await _require_sub_message(message):
+            return
+        await handle_roulette_cancel(message)
+        return
 
     # ── Рулетка: лог ──
     if is_roulette_log(text):
