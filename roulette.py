@@ -399,7 +399,7 @@ async def _execute_game(chat_id: int) -> None:
         if lose_lines:
             if win_lines:
                 lines.append("")
-            lines.append("<tg-emoji emoji-id="5429518319243775957">🎟</tg-emoji><b>Проигравшие:</b>")
+            lines.append('<tg-emoji emoji-id="5429518319243775957">🎟</tg-emoji><b>Проигравшие:</b>')
             lines += lose_lines
 
         _push_history(chat_id, result, color)
