@@ -67,7 +67,7 @@ def referrals_text(uid: int, bot_username: str) -> str:
         f'<code>{ref_link}</code>'
         f'</blockquote>\n\n'
         f'<blockquote>'
-        f'<tg-emoji emoji-id="5334544901428229844">💰</tg-emoji>  <i>Reward зачисляется сразу после того как приглашённый напишет /start по вашей ссылке</i>'
+        f'<tg-emoji emoji-id="5334544901428229844">💰</tg-emoji>  <i>Reward зачисляется сразу после того как приглашённый подпишется на все каналы!</i>'
         f'</blockquote>'
     )
 
