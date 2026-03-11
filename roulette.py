@@ -547,7 +547,7 @@ async def _cancel_bets(message: Message) -> None:
 
     if not player_bets:
         await message.reply(
-            '<tg-emoji emoji-id="5429518319243775957">🎟</tg-emoji> <b>У вас нет активных ставок.</b>',
+            '<tg-emoji emoji-id="5420323339723881652">🎟</tg-emoji> <b>У вас нет активных ставок!</b>',
             parse_mode=ParseMode.HTML,
         )
         return
@@ -572,11 +572,7 @@ async def _cancel_bets(message: Message) -> None:
     link = _user_link(uid, message.from_user.username, message.from_user.first_name or "?")
 
     await message.reply(
-        f'<tg-emoji emoji-id="5429518319243775957">🎟</tg-emoji> <b>Ставки отменены!</b>\n\n'
-        f'<blockquote>'
-        f'{link}  |  Отменено ставок: <b>{len(player_bets)}</b>\n'
-        f'<tg-emoji emoji-id="5206607081334906820">🎟</tg-emoji>  Возврат: <b>+{refund_total:,.2f} Px</b>'
-        f'</blockquote>',
+        f'<tg-emoji emoji-id="5420323339723881652">🎟</tg-emoji> <b>Ставки отменены!Был возврат!</b>\n\n'
         parse_mode=ParseMode.HTML,
     )
 
