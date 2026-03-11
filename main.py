@@ -273,30 +273,14 @@ async def _require_sub_callback(call: CallbackQuery) -> bool:
     """
     ok, unsub = await check_subscribed(call.bot, call.from_user.id)
     if not ok:
-        await call.message.edit_text(sub_text(unsub), reply_markup=sub_keyboard(unsub))
-        set_owner(call.message.message_id, call.from_user.id)
-        await call.answer()
+        try:
+            await call.message.edit_text(sub_text(unsub), reply_markup=sub_keyboard(unsub))
+            set_owner(call.message.message_id, call.from_user.id)
+        except Exception:
+            pass
+        await call.answer("🔒 Сначала подпишитесь на каналы!", show_alert=True)
         return False
     return True
-
-
-# ─────────────────────────────────────────
-#  Callback: «Я подписался — проверить»
-# ─────────────────────────────────────────
-@dp.callback_query(F.data == "sub_check")
-async def cb_sub_check(call: CallbackQuery, state: FSMContext):
-    uid = call.from_user.id
-    ok, unsub = await check_subscribed(call.bot, uid)
-    if not ok:
-        await call.answer("❌ Вы ещё не подписались на все каналы!", show_alert=True)
-        # Обновляем список (на случай если часть каналов уже добавлена)
-        await call.message.edit_text(sub_text(unsub), reply_markup=sub_keyboard(unsub))
-        set_owner(call.message.message_id, uid)
-        return
-    # Подписан — показываем главное меню
-    await call.message.edit_text(MAIN_TEXT, reply_markup=main_menu_keyboard())
-    set_owner(call.message.message_id, uid)
-    await call.answer("✅ Отлично! Добро пожаловать!")
 
 
 # ─────────────────────────────────────────
