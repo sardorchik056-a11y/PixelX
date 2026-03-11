@@ -83,8 +83,8 @@ MAX_BETS_TOTAL      = 100     # максимум ставок суммарно �
 AUTO_START_DELAY    = 120     # автозапуск через 2 минуты
 GO_COOLDOWN         = 15      # нельзя нажать «го» раньше чем через 15 сек
 
-BET_MIN             = 1
-BET_MAX             = 10_000_000
+BET_MIN             = 10
+BET_MAX             = 100_000_000
 
 # rate-limit ставок: не чаще 1 раза в N секунд с одного игрока
 BET_RATE_LIMIT      = 2.0
@@ -386,11 +386,11 @@ async def _execute_game(chat_id: int) -> None:
                 profit = round(payout - amt, 2)
                 _db_add_px(uid, payout)
                 win_lines.append(
-                    f"✅ {link}  |  {label}  |  <b>+{profit:,.2f} Px</b>"
+                    f'<blockquote> {link}  |  {label}  |  <b>+{profit:,.2f} Px</blockquote></b>'
                 )
             else:
                 lose_lines.append(
-                    f"❌ {link}  |  {label}  |  <b>-{amt:,.2f} Px</b>"
+                    f'<blockquote> {link}  |  {label}  |  <b>-{amt:,.2f} Px</b></blockquote>'
                 )
 
         if win_lines:
