@@ -446,7 +446,6 @@ async def cb_sell_start(call: CallbackQuery, state: FSMContext):
     await state.update_data(
         sell_msg_id=call.message.message_id,
         sell_chat_id=call.message.chat.id,
-        sell_group_msg_id=call.message.message_id,
     )
     await call.message.edit_text(
         f'<tg-emoji emoji-id="{EMOJI_SELL}">📤</tg-emoji> <b>Продажа Px</b>\n\n'
@@ -472,6 +471,7 @@ async def handle_sell_amount(message: Message, state: FSMContext):
         pass
     data        = await state.get_data()
     sell_msg_id = data.get("sell_msg_id")
+    sell_chat_id = data.get("sell_chat_id", uid)  # используем чат где была кнопка
 
     raw = (message.text or "").strip().replace(",", "").replace(" ", "").replace("_", "")
     try:
@@ -479,17 +479,8 @@ async def handle_sell_amount(message: Message, state: FSMContext):
     except ValueError:
         return
 
-    # Удаляем сообщение бота из группы/чата (то самое "Введите количество Px")
-    sell_chat_id      = data.get("sell_chat_id")
-    sell_group_msg_id = data.get("sell_group_msg_id")
-    if sell_chat_id and sell_group_msg_id:
-        try:
-            await _bot_ref.delete_message(chat_id=sell_chat_id, message_id=sell_group_msg_id)
-        except Exception:
-            pass
-
     async def _err(text: str):
-        new_mid = await _edit_or_send(uid, sell_msg_id, text, _kb_cancel_sell())
+        new_mid = await _edit_or_send(sell_chat_id, sell_msg_id, text, _kb_cancel_sell())
         if new_mid and new_mid != sell_msg_id:
             await state.update_data(sell_msg_id=new_mid)
             set_owner_fn(new_mid, uid)
@@ -529,7 +520,7 @@ async def handle_sell_amount(message: Message, state: FSMContext):
     await state.set_state(SellStates.waiting_price)
 
     new_mid = await _edit_or_send(
-        uid, sell_msg_id,
+        sell_chat_id, sell_msg_id,
         f'<tg-emoji emoji-id="5197434882321567830">📤</tg-emoji> <b>Цена лота</b>\n\n'
         f'<blockquote>'
         f'<b><tg-emoji emoji-id="5325547803936572038">📤</tg-emoji>Количество: {amount:,.0f} Px</b>\n\n'
@@ -542,9 +533,6 @@ async def handle_sell_amount(message: Message, state: FSMContext):
     set_owner_fn(new_mid, uid)
 
 
-# ════════════════════════════════════════════════════════════
-#  ПРОДАЖА — шаг 2: цена лота
-# ════════════════════════════════════════════════════════════
 @exchange_router.message(SellStates.waiting_price)
 async def handle_sell_price(message: Message, state: FSMContext):
     uid = message.from_user.id
@@ -552,9 +540,10 @@ async def handle_sell_price(message: Message, state: FSMContext):
         await message.delete()
     except Exception:
         pass
-    data        = await state.get_data()
-    sell_msg_id = data.get("sell_msg_id")
-    amount      = data.get("sell_amount", 0)
+    data         = await state.get_data()
+    sell_msg_id  = data.get("sell_msg_id")
+    sell_chat_id = data.get("sell_chat_id", uid)
+    amount       = data.get("sell_amount", 0)
 
     raw = (message.text or "").strip().replace(",", ".")
     try:
@@ -566,7 +555,7 @@ async def handle_sell_price(message: Message, state: FSMContext):
     eps = 0.001
     if not (p_min - eps <= lot_price <= p_max + eps):
         new_mid = await _edit_or_send(
-            uid, sell_msg_id,
+            sell_chat_id, sell_msg_id,
             f'<tg-emoji emoji-id="5420323339723881652">⚠️</tg-emoji> '
             f'<b>Цена вне диапазона!</b>\n\n'
             f'Введите от <b>${p_min:.2f}</b> до <b>${p_max:.2f}</b>:',
@@ -584,7 +573,7 @@ async def handle_sell_price(message: Message, state: FSMContext):
     await state.set_state(SellStates.waiting_duration)
 
     new_mid = await _edit_or_send(
-        uid, sell_msg_id,
+        sell_chat_id, sell_msg_id,
         f'<tg-emoji emoji-id="5274055917766202507">📤</tg-emoji> <b>Срок размещения</b>\n\n'
         f'<blockquote>'
         f'<tg-emoji emoji-id="5325547803936572038">📤</tg-emoji>Количество: <b>{amount:,.0f} Px</b>\n'
