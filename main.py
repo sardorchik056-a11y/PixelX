@@ -981,9 +981,6 @@ async def _try_reward_referral_and_notify(invitee_uid: int) -> None:
                 text=(
                     f'<tg-emoji emoji-id="5222079954421818267">👥</tg-emoji> '
                     f'<b>Новый реферал!</b>\n\n'
-                    f'<blockquote>Ваш реферал подписался на все каналы и получил награду!\n'
-                    f'<tg-emoji emoji-id="5429651785352501917">⚡</tg-emoji>  '
-                    f'Вам начислено: <b>{REFERRAL_REWARD_PX:,} Px</b></blockquote>'
                 )
             )
         except Exception:
