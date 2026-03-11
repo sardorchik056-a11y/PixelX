@@ -485,8 +485,7 @@ async def _place_bet(message: Message, amount: float, new_bets: list) -> None:
     if total_bets + len(new_bets) > MAX_BETS_TOTAL:
         free = MAX_BETS_TOTAL - total_bets
         await message.reply(
-            f"❌ Достигнут общий лимит раунда!\n"
-            f"<blockquote>Осталось слотов: <b>{max(free, 0)}</b> из {MAX_BETS_TOTAL}</blockquote>",
+            f"❌ Достигнут общий лимит раунда!\n",
             parse_mode=ParseMode.HTML,
         )
         return
@@ -496,11 +495,7 @@ async def _place_bet(message: Message, amount: float, new_bets: list) -> None:
     if player_bets + len(new_bets) > MAX_BETS_PER_PLAYER:
         free_player = MAX_BETS_PER_PLAYER - player_bets
         await message.reply(
-            f"❌ Личный лимит ставок!\n"
-            f"<blockquote>"
-            f"Ваших ставок в раунде: <b>{player_bets}/{MAX_BETS_PER_PLAYER}</b>\n"
-            f"Можно ещё: <b>{max(free_player, 0)}</b>"
-            f"</blockquote>",
+            f"❌ Личный лимит ставок!\n",
             parse_mode=ParseMode.HTML,
         )
         return
@@ -513,11 +508,7 @@ async def _place_bet(message: Message, amount: float, new_bets: list) -> None:
     if not _db_try_spend_px(uid, total_cost):
         bal = _db_get_px(uid)
         await message.reply(
-            f"❌ Недостаточно Px!\n"
-            f"<blockquote>"
-            f"Нужно: <b>{total_cost:,.2f} Px</b>\n"
-            f"Баланс: <b>{bal:,.2f} Px</b>"
-            f"</blockquote>",
+            f"❌ Недостаточно Px!\n",
             parse_mode=ParseMode.HTML,
         )
         return
@@ -544,16 +535,13 @@ async def _place_bet(message: Message, amount: float, new_bets: list) -> None:
     # ── 9. Подтверждение ──
     conf_lines: list[str] = ["🎰 <b>Ставки приняты!</b>\n"]
     for bt, bv in new_bets:
-        conf_lines.append(f"<b>{amount:,.2f} Px</b> — {_bet_label(bt, bv)}")
+        conf_lines.append(f"<blockquote><b><code>{amount:,.2f} Px</code></b> — {_bet_label(bt, bv)}</blockquote>")
 
     total_now   = len(game["bets"])
     my_now      = _count_player_bets(game, uid)
     conf_lines.append(
         f"\n<blockquote>"
-        f"Ваших ставок: <b>{my_now}/{MAX_BETS_PER_PLAYER}</b>  |  "
-        f"Всего в раунде: <b>{total_now}/{MAX_BETS_TOTAL}</b>\n"
-        f"Пиши <b>го</b> для старта (доступно через {GO_COOLDOWN} сек.)\n"
-        f"Автозапуск через <b>2 мин.</b>"
+        f"Автозапуск через<b>2 мин!</b>"
         f"</blockquote>"
     )
 
