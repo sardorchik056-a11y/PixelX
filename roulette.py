@@ -557,9 +557,8 @@ async def cmd_r(message: Message) -> None:
     parts = text.split(None, 1)
     if len(parts) < 2:
         await message.reply(
-            "🎰 <b>Рулетка</b>\n\n"
+            "<tg-emoji emoji-id="5334544901428229844">🎟</tg-emoji> <b>Инструкция</b>\n\n"
             "<blockquote>"
-            "Слеш не нужен — пишите прямо в чат:\n\n"
             "<code>100 7</code>        — число 7 (×35)\n"
             "<code>100 5-17-32</code>  — числа 5,17,32 (×35 каждое)\n"
             "<code>100 к</code>        — красное (×1.9)\n"
@@ -568,8 +567,8 @@ async def cmd_r(message: Message) -> None:
             "<code>100 нечет</code>    — нечётное (×1.9)\n\n"
             "<code>го</code>           — запустить игру\n"
             "<code>лог</code>          — последние 10 результатов\n\n"
-            f"Лимит: <b>{MAX_BETS_PER_PLAYER}</b> ставок на игрока  |  "
-            f"<b>{MAX_BETS_TOTAL}</b> ставок в раунде"
+            f'Лимит: <tg-emoji emoji-id="5420323339723881652">🎟</tg-emoji><b>{MAX_BETS_PER_PLAYER}</b> ставок на игрока!  |  '
+            f'<tg-emoji emoji-id="5420323339723881652">🎟</tg-emoji><b>{MAX_BETS_TOTAL}</b> ставок в раунде'
             "</blockquote>",
             parse_mode=ParseMode.HTML,
         )
