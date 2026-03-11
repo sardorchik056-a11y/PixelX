@@ -533,7 +533,7 @@ async def _place_bet(message: Message, amount: float, new_bets: list) -> None:
         _schedule_auto(chat_id)
 
     # ── 9. Подтверждение ──
-    conf_lines: list[str] = ["<tg-emoji emoji-id="5206607081334906820">🎟</tg-emoji><b>Ставки приняты!</b>\n"]
+    conf_lines: list[str] = ['<tg-emoji emoji-id="5206607081334906820">🎟</tg-emoji><b>Ставки приняты!</b>\n']
     for bt, bv in new_bets:
         conf_lines.append(f"<blockquote><b><code>{amount:,.2f} Px</code></b> — <b>{_bet_label(bt, bv)}</b></blockquote>")
 
@@ -541,7 +541,7 @@ async def _place_bet(message: Message, amount: float, new_bets: list) -> None:
     my_now      = _count_player_bets(game, uid)
     conf_lines.append(
         f"\n<blockquote>"
-        f"<tg-emoji emoji-id="5440621591387980068">🎟</tg-emoji><b>Автозапуск через2 мин!</b>"
+        f'<tg-emoji emoji-id="5440621591387980068">🎟</tg-emoji><b>Автозапуск через2 мин!</b>'
         f"</blockquote>"
     )
 
@@ -605,13 +605,13 @@ async def _send_log(message: Message) -> None:
 
     if not history:
         await message.reply(
-            "<tg-emoji emoji-id="5323442290708985472">🎟</tg-emoji> <b>История игр</b>\n\n"
+            '<tg-emoji emoji-id="5323442290708985472">🎟</tg-emoji> <b>История игр</b>\n\n'
             "<blockquote>Игры ещё не проводились.</blockquote>",
             parse_mode=ParseMode.HTML,
         )
         return
 
-    lines: list[str] = ["<tg-emoji emoji-id="5323442290708985472">🎟</tg-emoji> <b>Последние 10 игр</b>\n"]
+    lines: list[str] = ['<tg-emoji emoji-id="5323442290708985472">🎟</tg-emoji> <b>Последние 10 игр</b>\n']
     for entry in reversed(history):
         n  = entry["number"]
         ce = _ce(entry["color"])
