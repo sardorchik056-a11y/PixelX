@@ -27,7 +27,7 @@ EMOJI_LOCK   = "5197288647275071607"
 EMOJI_CHECK  = "5206607081334906820"
 EMOJI_BACK   = "5906771962734057347"
 EMOJI_RELOAD = "5271604874419647061"
-
+EMOJI_HASH = "5206607081334906820"
 
 def _load_channels() -> list[dict]:
     """Загружает список каналов из файла."""
@@ -126,12 +126,13 @@ def sub_keyboard(unsubscribed: list[dict]) -> InlineKeyboardMarkup:
     rows = []
     for ch in unsubscribed:
         rows.append([InlineKeyboardButton(
-            text=f"📢 {ch['title']}",
+            text=f"{ch['title']}",
             url=ch["invite_link"],
         )])
     rows.append([InlineKeyboardButton(
         text="проверить",
         callback_data="sub_check",
+        icon_custom_emoji_id=EMOJI_HASH,
     )])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
