@@ -271,6 +271,9 @@ async def _auto_start_coro(chat_id: int) -> None:
         game = _get_game(chat_id)
         if game["running"] or not game["bets"]:
             return
+        # Удаляем себя из словаря ДО вызова _execute_game,
+        # чтобы _cancel_auto внутри не пытался отменить уже работающую задачу
+        _auto_tasks.pop(chat_id, None)
         try:
             await _bot.send_message(
                 chat_id,
@@ -304,10 +307,7 @@ def _cancel_auto(chat_id: int) -> None:
 async def _execute_game(chat_id: int) -> None:
     game = _get_game(chat_id)
 
-    if game["lock"].locked():
-        log.debug("_execute_game: lock busy for chat %s, skipping", chat_id)
-        return
-
+    # ── Атомарно захватываем ставки ──
     async with game["lock"]:
         if game["running"]:
             log.debug("_execute_game: already running for chat %s", chat_id)
@@ -318,30 +318,37 @@ async def _execute_game(chat_id: int) -> None:
 
         game["running"]        = True
         game["first_bet_time"] = None
+        # Отменяем авто-таймер только если он ещё жив
+        # (при вызове из auto_start_coro задача уже удалена из словаря)
         _cancel_auto(chat_id)
 
         bets         = game["bets"][:]
         game["bets"] = []
 
+    # ── Весь IO идёт за пределами lock ──
     log.info("_execute_game: spinning for chat %s, bets=%d", chat_id, len(bets))
 
     result     = random.randint(0, 36)
     color      = _color(result)
     sticker_id = ROULETTE_STICKERS[result][1]
+    stk_msg    = None
 
     try:
-        # ── Отправляем стикер (некритично — не падаем если не получилось) ──
-        stk_msg = None
+        # ── Стикер ──
         try:
             stk_msg = await _bot.send_sticker(chat_id, sticker_id)
+            log.info("_execute_game: sticker sent msg_id=%s", stk_msg.message_id)
         except Exception as e:
             log.warning("_execute_game: send_sticker failed: %s", e)
 
-        await asyncio.sleep(3)
+        # Ждём показа стикера — shield защищает sleep от внешней отмены
+        await asyncio.shield(asyncio.sleep(3))
 
+        # Удаляем стикер
         if stk_msg is not None:
             try:
                 await _bot.delete_message(chat_id, stk_msg.message_id)
+                log.info("_execute_game: sticker deleted")
             except Exception as e:
                 log.warning("_execute_game: delete sticker failed: %s", e)
 
@@ -367,22 +374,20 @@ async def _execute_game(chat_id: int) -> None:
                     _db_add_px(uid, payout)
                 except Exception as e:
                     log.error("_execute_game: db_add_px failed uid=%s: %s", uid, e)
-                # ── Статистика: победа ──
                 if _db_update_stats:
                     try:
                         _db_update_stats(uid, won=profit, lost=0.0)
                     except Exception as e:
-                        log.error("_execute_game: update_stats win failed uid=%s: %s", uid, e)
+                        log.error("_execute_game: update_stats win uid=%s: %s", uid, e)
                 win_lines.append(
                     f'<blockquote> {link}  |  {label}  |  <b>+{profit:,.2f} Px</b></blockquote>'
                 )
             else:
-                # ── Статистика: проигрыш ──
                 if _db_update_stats:
                     try:
                         _db_update_stats(uid, won=0.0, lost=amt)
                     except Exception as e:
-                        log.error("_execute_game: update_stats lose failed uid=%s: %s", uid, e)
+                        log.error("_execute_game: update_stats lose uid=%s: %s", uid, e)
                 lose_lines.append(
                     f'<blockquote> {link}  |  {label}  |  <b>-{amt:,.2f} Px</b></blockquote>'
                 )
@@ -407,7 +412,8 @@ async def _execute_game(chat_id: int) -> None:
         await _bot.send_message(chat_id, "\n".join(lines), parse_mode=ParseMode.HTML)
         log.info("_execute_game: done chat=%s result=%d", chat_id, result)
 
-    except Exception as ex:
+    except BaseException as ex:
+        # BaseException ловит и Exception и CancelledError
         log.exception("_execute_game CRITICAL error chat=%s: %s", chat_id, ex)
         for b in bets:
             try:
@@ -424,6 +430,7 @@ async def _execute_game(chat_id: int) -> None:
             pass
     finally:
         game["running"] = False
+        log.info("_execute_game: running=False for chat %s", chat_id)
 
 
 # ─────────────────────────────────────────
@@ -547,7 +554,7 @@ async def _cancel_bets(message: Message) -> None:
 
     if not player_bets:
         await message.reply(
-            '<tg-emoji emoji-id="5420323339723881652">🎟</tg-emoji> <b>У вас нет активных ставок!</b>',
+            '<tg-emoji emoji-id="5429518319243775957">🎟</tg-emoji> <b>У вас нет активных ставок.</b>',
             parse_mode=ParseMode.HTML,
         )
         return
@@ -572,7 +579,11 @@ async def _cancel_bets(message: Message) -> None:
     link = _user_link(uid, message.from_user.username, message.from_user.first_name or "?")
 
     await message.reply(
-        f'<tg-emoji emoji-id="5420323339723881652">🎟</tg-emoji> <b>Ставки отменены!Был возврат!</b>',
+        f'<tg-emoji emoji-id="5429518319243775957">🎟</tg-emoji> <b>Ставки отменены!</b>\n\n'
+        f'<blockquote>'
+        f'{link}  |  Отменено ставок: <b>{len(player_bets)}</b>\n'
+        f'<tg-emoji emoji-id="5206607081334906820">🎟</tg-emoji>  Возврат: <b>+{refund_total:,.2f} Px</b>'
+        f'</blockquote>',
         parse_mode=ParseMode.HTML,
     )
 
