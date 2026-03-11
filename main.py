@@ -70,6 +70,16 @@ from database import (
 )
 from treyd_db import init_exchange_db
 
+# ── Подписки ──
+from subscription import (
+    check_subscribed,
+    sub_keyboard,
+    sub_text,
+    add_channel,
+    remove_channel,
+    get_channels,
+)
+
 load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -239,6 +249,54 @@ dp.include_router(helper_router)
 dp.include_router(roulette_router)
 
 low_priority_router = Router()
+
+
+# ─────────────────────────────────────────
+#  Вспомогательная функция проверки подписки
+#  Возвращает True если всё ок, иначе
+#  отправляет/редактирует сообщение и возвращает False.
+# ─────────────────────────────────────────
+async def _require_sub_message(message: Message) -> bool:
+    """Проверка для обычных сообщений. Отвечает reply при провале."""
+    ok, unsub = await check_subscribed(message.bot, message.from_user.id)
+    if not ok:
+        sent = await message.answer(sub_text(unsub), reply_markup=sub_keyboard(unsub))
+        set_owner(sent.message_id, message.from_user.id)
+        return False
+    return True
+
+
+async def _require_sub_callback(call: CallbackQuery) -> bool:
+    """
+    Проверка для callback-кнопок.
+    Редактирует текущее сообщение при провале.
+    """
+    ok, unsub = await check_subscribed(call.bot, call.from_user.id)
+    if not ok:
+        await call.message.edit_text(sub_text(unsub), reply_markup=sub_keyboard(unsub))
+        set_owner(call.message.message_id, call.from_user.id)
+        await call.answer()
+        return False
+    return True
+
+
+# ─────────────────────────────────────────
+#  Callback: «Я подписался — проверить»
+# ─────────────────────────────────────────
+@dp.callback_query(F.data == "sub_check")
+async def cb_sub_check(call: CallbackQuery, state: FSMContext):
+    uid = call.from_user.id
+    ok, unsub = await check_subscribed(call.bot, uid)
+    if not ok:
+        await call.answer("❌ Вы ещё не подписались на все каналы!", show_alert=True)
+        # Обновляем список (на случай если часть каналов уже добавлена)
+        await call.message.edit_text(sub_text(unsub), reply_markup=sub_keyboard(unsub))
+        set_owner(call.message.message_id, uid)
+        return
+    # Подписан — показываем главное меню
+    await call.message.edit_text(MAIN_TEXT, reply_markup=main_menu_keyboard())
+    set_owner(call.message.message_id, uid)
+    await call.answer("✅ Отлично! Добро пожаловать!")
 
 
 # ─────────────────────────────────────────
@@ -475,12 +533,6 @@ def build_stats_text(user: dict) -> str:
         f'<tg-emoji emoji-id="5429518319243775957">⚡</tg-emoji>  <b>Проиграно всего:</b> <code>{user["total_lost"]:,.2f}</code>\n'
         f'</blockquote>'
     )
-
-
-# ─────────────────────────────────────────
-#  Разделы в разработке
-# ─────────────────────────────────────────
-DEV_SECTIONS: dict = {}
 
 
 # ─────────────────────────────────────────
@@ -727,6 +779,234 @@ async def cb_check_exhausted_info(call: CallbackQuery):
 
 
 # ─────────────────────────────────────────
+#  /addchannel — добавить обязательный канал (только для админов)
+#  Использование: /addchannel https://t.me/channel_username
+#  Бот должен быть администратором в этом канале!
+# ─────────────────────────────────────────
+@dp.message(Command("addchannel"))
+async def cmd_addchannel(message: Message):
+    uid = message.from_user.id
+
+    if uid not in ADMIN_IDS:
+        await message.answer("🚫 У вас нет доступа к этой команде!")
+        return
+
+    args = (message.text or "").split(maxsplit=1)[1:]
+    if not args:
+        await message.answer(
+            f'📢 <b>Неверный формат.</b>\n\n'
+            f'<blockquote>Использование:\n'
+            f'<code>/addchannel https://t.me/channel</code>\n\n'
+            f'Бот должен быть администратором в канале!\n'
+            f'Для закрытых каналов используйте числовой ID:\n'
+            f'<code>/addchannel -1001234567890</code></blockquote>'
+        )
+        return
+
+    raw = args[0].strip()
+
+    # Определяем channel_id: числовой ID или username из ссылки
+    if raw.lstrip('-').isdigit():
+        channel_id = int(raw)
+        lookup     = str(channel_id)
+    else:
+        # Извлекаем username из ссылки вида https://t.me/xxx или @xxx
+        username = raw.replace("https://t.me/", "").replace("http://t.me/", "").lstrip("@").strip("/")
+        if not username:
+            await message.answer("❌ Не удалось определить канал из ссылки!")
+            return
+        lookup     = f"@{username}"
+        channel_id = lookup
+
+    # Пробуем получить инфо о канале через Telegram API
+    try:
+        chat = await bot.get_chat(channel_id)
+    except Exception as e:
+        await message.answer(
+            f'❌ <b>Не удалось получить информацию о канале.</b>\n\n'
+            f'<blockquote>Убедитесь что:\n'
+            f'• Бот добавлен в канал как <b>администратор</b>\n'
+            f'• Ссылка/ID указаны верно\n\n'
+            f'Ошибка: <code>{e}</code></blockquote>'
+        )
+        return
+
+    # Проверяем что бот является администратором
+    try:
+        bot_member = await bot.get_chat_member(chat.id, (await bot.get_me()).id)
+        if bot_member.status not in ("administrator", "creator"):
+            await message.answer(
+                f'❌ <b>Бот не является администратором в этом канале!</b>\n\n'
+                f'<blockquote>Добавьте бота как администратора и попробуйте снова.</blockquote>'
+            )
+            return
+    except Exception as e:
+        await message.answer(f'❌ Ошибка проверки прав бота: <code>{e}</code>')
+        return
+
+    # Формируем invite link
+    invite_link = chat.invite_link or f"https://t.me/{chat.username}" if chat.username else raw
+    title       = chat.title or str(chat.id)
+
+    ok = add_channel(chat.id, title, invite_link)
+
+    if ok:
+        await message.answer(
+            f'✅ <b>Канал добавлен в обязательные!</b>\n\n'
+            f'<blockquote>'
+            f'📢  Название: <b>{title}</b>\n'
+            f'🆔  ID: <code>{chat.id}</code>\n'
+            f'🔗  Ссылка: {invite_link}'
+            f'</blockquote>'
+        )
+    else:
+        await message.answer(
+            f'⚠️ <b>Канал уже есть в списке обязательных!</b>\n\n'
+            f'<blockquote>📢 {title} (<code>{chat.id}</code>)</blockquote>'
+        )
+
+
+# ─────────────────────────────────────────
+#  /delchannel — удалить обязательный канал (только для админов)
+#  Использование: /delchannel https://t.me/channel_username
+#             или /delchannel -1001234567890
+# ─────────────────────────────────────────
+@dp.message(Command("delchannel"))
+async def cmd_delchannel(message: Message):
+    uid = message.from_user.id
+
+    if uid not in ADMIN_IDS:
+        await message.answer("🚫 У вас нет доступа к этой команде!")
+        return
+
+    args = (message.text or "").split(maxsplit=1)[1:]
+
+    channels = get_channels()
+    if not channels:
+        await message.answer(
+            f'📋 <b>Список обязательных каналов пуст.</b>\n\n'
+            f'<blockquote>Добавьте каналы с помощью <code>/addchannel</code></blockquote>'
+        )
+        return
+
+    if not args:
+        # Показываем список всех каналов с ID для удобного копирования
+        lines = "\n".join(
+            f'• <b>{ch["title"]}</b> — <code>{ch["id"]}</code>'
+            for ch in channels
+        )
+        await message.answer(
+            f'📋 <b>Текущие обязательные каналы:</b>\n\n'
+            f'<blockquote>{lines}</blockquote>\n\n'
+            f'<blockquote>Для удаления:\n<code>/delchannel ID_или_ссылка</code></blockquote>'
+        )
+        return
+
+    raw = args[0].strip()
+
+    # Определяем channel_id
+    if raw.lstrip('-').isdigit():
+        target_id = str(int(raw))
+    else:
+        username = raw.replace("https://t.me/", "").replace("http://t.me/", "").lstrip("@").strip("/")
+        # Пробуем найти по username в списке
+        target_id = None
+        for ch in channels:
+            cid = str(ch["id"])
+            if username and (cid == f"@{username}" or ch.get("title", "").lower() == username.lower()):
+                target_id = cid
+                break
+        if not target_id:
+            # Попробуем получить chat_id через API
+            try:
+                chat = await bot.get_chat(f"@{username}")
+                target_id = str(chat.id)
+            except Exception:
+                target_id = f"@{username}"
+
+    ok = remove_channel(target_id)
+
+    if ok:
+        await message.answer(
+            f'✅ <b>Канал удалён из обязательных!</b>\n\n'
+            f'<blockquote>🆔 ID: <code>{target_id}</code></blockquote>'
+        )
+    else:
+        lines = "\n".join(
+            f'• <b>{ch["title"]}</b> — <code>{ch["id"]}</code>'
+            for ch in channels
+        )
+        await message.answer(
+            f'❌ <b>Канал не найден в списке обязательных.</b>\n\n'
+            f'<blockquote><b>Текущие каналы:</b>\n{lines}</blockquote>'
+        )
+
+
+# ─────────────────────────────────────────
+#  /channels — показать список (только для админов)
+# ─────────────────────────────────────────
+@dp.message(Command("channels"))
+async def cmd_channels(message: Message):
+    uid = message.from_user.id
+    if uid not in ADMIN_IDS:
+        await message.answer("🚫 У вас нет доступа к этой команде!")
+        return
+
+    channels = get_channels()
+    if not channels:
+        await message.answer(
+            f'📋 <b>Список обязательных каналов пуст.</b>\n\n'
+            f'<blockquote>Добавьте: <code>/addchannel https://t.me/channel</code></blockquote>'
+        )
+        return
+
+    lines = "\n".join(
+        f'• <b>{ch["title"]}</b>\n  🆔 <code>{ch["id"]}</code>\n  🔗 {ch["invite_link"]}'
+        for ch in channels
+    )
+    await message.answer(
+        f'📋 <b>Обязательные каналы ({len(channels)} шт.):</b>\n\n'
+        f'<blockquote>{lines}</blockquote>'
+    )
+
+
+# ─────────────────────────────────────────
+#  Словарь ожидающих реферальных наград
+#  invitee_uid -> inviter_uid
+#  Живёт в памяти — этого достаточно, т.к.
+#  пользователь обычно подписывается в том же сеансе.
+#  db_try_reward_referral() идемпотентна — дважды не начислит.
+# ─────────────────────────────────────────
+_pending_referrals: dict[int, int] = {}
+
+
+async def _try_reward_referral_and_notify(invitee_uid: int) -> None:
+    """
+    Пытается начислить реферальную награду по данным из БД.
+    Уведомляет инвайтера если награда выдана.
+    Вызывается только после подтверждения подписки.
+    db_try_reward_referral() сама проверяет — была ли уже выдана награда.
+    """
+    inviter_id = _pending_referrals.pop(invitee_uid, None)
+    rewarded   = db_try_reward_referral(invitee_uid)
+
+    if rewarded and inviter_id is not None:
+        try:
+            await bot.send_message(
+                chat_id=inviter_id,
+                text=(
+                    f'<tg-emoji emoji-id="5222079954421818267">👥</tg-emoji> '
+                    f'<b>Новый реферал!</b>\n\n'
+                    f'<blockquote>Ваш реферал подписался на все каналы и получил награду!\n'
+                    f'<tg-emoji emoji-id="5429651785352501917">⚡</tg-emoji>  '
+                    f'Вам начислено: <b>{REFERRAL_REWARD_PX:,} Px</b></blockquote>'
+                )
+            )
+        except Exception:
+            pass
+
+
+# ─────────────────────────────────────────
 #  /start
 # ─────────────────────────────────────────
 @dp.message(CommandStart())
@@ -741,11 +1021,13 @@ async def cmd_start(message: Message, command: CommandObject, state: FSMContext)
     if command.args:
         args = command.args.strip()
 
+        # ── Чек ── (не требует подписки)
         if args.startswith("check_"):
             check_id = args[6:]
             await _process_check_deeplink(message, check_id)
             return
 
+        # ── Реферал ── регистрируем связь в БД; награду — после подписки
         if is_new and args.startswith("ref_"):
             inviter_part = args[4:]
             if inviter_part.isdigit():
@@ -753,21 +1035,46 @@ async def cmd_start(message: Message, command: CommandObject, state: FSMContext)
                 if inviter_id != uid and not db_is_already_referred(uid):
                     registered = db_register_referral(invitee_id=uid, inviter_id=inviter_id)
                     if registered:
-                        rewarded_inviter = db_try_reward_referral(uid)
-                        if rewarded_inviter:
-                            try:
-                                await bot.send_message(
-                                    chat_id=inviter_id,
-                                    text=(
-                                        f'<tg-emoji emoji-id="5222079954421818267">👥</tg-emoji> '
-                                        f'<b>Новый реферал!</b>\n\n'
-                                    )
-                                )
-                            except Exception:
-                                pass
+                        # Запоминаем в словаре — НЕ в FSM-стейте,
+                        # чтобы данные не терялись при state.clear()
+                        _pending_referrals[uid] = inviter_id
+
+    # ── Проверяем подписку ──
+    ok, unsub = await check_subscribed(bot, uid)
+    if not ok:
+        sent = await message.answer(sub_text(unsub), reply_markup=sub_keyboard(unsub))
+        set_owner(sent.message_id, uid)
+        return
+
+    # ── Подписан — пробуем начислить реферальную награду ──
+    # db_try_reward_referral идемпотентна: если уже начислено — ничего не произойдёт
+    await _try_reward_referral_and_notify(uid)
 
     sent = await message.answer(MAIN_TEXT, reply_markup=main_menu_keyboard())
     set_owner(sent.message_id, uid)
+
+
+# ─────────────────────────────────────────
+#  Callback «Я подписался — проверить»
+# ─────────────────────────────────────────
+@dp.callback_query(F.data == "sub_check")
+async def cb_sub_check(call: CallbackQuery, state: FSMContext):
+    uid = call.from_user.id
+    ok, unsub = await check_subscribed(call.bot, uid)
+    if not ok:
+        await call.answer("❌ Вы ещё не подписались на все каналы!", show_alert=True)
+        await call.message.edit_text(sub_text(unsub), reply_markup=sub_keyboard(unsub))
+        set_owner(call.message.message_id, uid)
+        return
+
+    # Подписан — пробуем начислить реферальную награду.
+    # Если у пользователя нет записи в _pending_referrals и нет
+    # неначисленного реферала в БД — функция просто ничего не сделает.
+    await _try_reward_referral_and_notify(uid)
+
+    await call.message.edit_text(MAIN_TEXT, reply_markup=main_menu_keyboard())
+    set_owner(call.message.message_id, uid)
+    await call.answer("✅ Отлично! Добро пожаловать!")
 
 
 # ─────────────────────────────────────────
@@ -777,6 +1084,8 @@ async def cmd_start(message: Message, command: CommandObject, state: FSMContext)
 async def cb_main_menu(call: CallbackQuery, state: FSMContext):
     if not is_owner(call.message.message_id, call.from_user.id):
         await call.answer("🚫 Это не ваша кнопка!", show_alert=True); return
+    if not await _require_sub_callback(call):
+        return
     await state.clear()
     await call.message.edit_text(MAIN_TEXT, reply_markup=main_menu_keyboard())
     set_owner(call.message.message_id, call.from_user.id)
@@ -790,6 +1099,8 @@ async def cb_main_menu(call: CallbackQuery, state: FSMContext):
 async def cb_profile(call: CallbackQuery):
     if not is_owner(call.message.message_id, call.from_user.id):
         await call.answer("🚫 Это не ваша кнопка!", show_alert=True); return
+    if not await _require_sub_callback(call):
+        return
     user = db_get_or_create_user(call.from_user)
     await call.message.edit_text(build_profile_text(user), reply_markup=profile_keyboard())
     set_owner(call.message.message_id, call.from_user.id)
@@ -800,6 +1111,8 @@ async def cb_profile(call: CallbackQuery):
 async def cb_stats(call: CallbackQuery):
     if not is_owner(call.message.message_id, call.from_user.id):
         await call.answer("🚫 Это не ваша кнопка!", show_alert=True); return
+    if not await _require_sub_callback(call):
+        return
     user = db_get_or_create_user(call.from_user)
     await call.message.edit_text(build_stats_text(user), reply_markup=back_profile_keyboard())
     set_owner(call.message.message_id, call.from_user.id)
@@ -813,18 +1126,22 @@ async def cb_stats(call: CallbackQuery):
 async def cb_about(call: CallbackQuery):
     if not is_owner(call.message.message_id, call.from_user.id):
         await call.answer("🚫 Это не ваша кнопка!", show_alert=True); return
+    if not await _require_sub_callback(call):
+        return
     await call.message.edit_text(ABOUT_TEXT, reply_markup=about_keyboard())
     set_owner(call.message.message_id, call.from_user.id)
     await call.answer()
 
 
 # ─────────────────────────────────────────
-#  Лидеры — топ-10 по балансу
+#  Лидеры
 # ─────────────────────────────────────────
 @dp.callback_query(F.data == "leaders")
 async def cb_leaders(call: CallbackQuery):
     if not is_owner(call.message.message_id, call.from_user.id):
         await call.answer("🚫 Это не ваша кнопка!", show_alert=True); return
+    if not await _require_sub_callback(call):
+        return
     text = build_leaders_text()
     await call.message.edit_text(text, reply_markup=back_main_keyboard())
     set_owner(call.message.message_id, call.from_user.id)
@@ -838,6 +1155,8 @@ async def cb_leaders(call: CallbackQuery):
 async def cb_promocodes(call: CallbackQuery, state: FSMContext):
     if not is_owner(call.message.message_id, call.from_user.id):
         await call.answer("🚫 Это не ваша кнопка!", show_alert=True); return
+    if not await _require_sub_callback(call):
+        return
 
     await state.set_state(PromoStates.waiting_for_code)
     await state.update_data(promo_msg_id=call.message.message_id)
@@ -867,6 +1186,14 @@ async def handle_promo_input(message: Message, state: FSMContext):
     except Exception:
         pass
 
+    # Проверяем подписку даже в FSM-состоянии
+    ok, unsub = await check_subscribed(bot, uid)
+    if not ok:
+        await state.clear()
+        sent = await message.answer(sub_text(unsub), reply_markup=sub_keyboard(unsub))
+        set_owner(sent.message_id, uid)
+        return
+
     data         = await state.get_data()
     promo_msg_id = data.get("promo_msg_id")
 
@@ -895,7 +1222,7 @@ async def handle_promo_input(message: Message, state: FSMContext):
 
 
 # ─────────────────────────────────────────
-#  Промокоды — команды /promo, promo, промо
+#  /promo, promo, промо
 # ─────────────────────────────────────────
 @dp.message(Command("promo"))
 async def cmd_promo_slash(message: Message, command: CommandObject):
@@ -910,6 +1237,10 @@ async def cmd_promo_slash(message: Message, command: CommandObject):
         return
 
     db_get_or_create_user(message.from_user)
+
+    if not await _require_sub_message(message):
+        return
+
     text = await _activate_promo(uid, code)
     await message.reply(text)
 
@@ -924,6 +1255,10 @@ async def cmd_promo_text(message: Message):
         return
 
     db_get_or_create_user(message.from_user)
+
+    if not await _require_sub_message(message):
+        return
+
     text = await _activate_promo(uid, code)
     await message.reply(text)
 
@@ -948,6 +1283,10 @@ async def _handle_transfer(message: Message, amount_str: str):
     if target_user.id == uid:
         return
     if target_user.is_bot:
+        return
+
+    # Проверяем подписку отправителя
+    if not await _require_sub_message(message):
         return
 
     amount_str = amount_str.strip().replace(",", ".")
@@ -1200,7 +1539,7 @@ async def cmd_add_px(message: Message):
 
 
 # ─────────────────────────────────────────
-#  /reck — рассылка всем пользователям (только админ)
+#  /reck — рассылка всем пользователям
 # ─────────────────────────────────────────
 def _db_get_all_user_ids() -> list[int]:
     from database import get_conn
@@ -1274,6 +1613,10 @@ _BALANCE_WORDS = {
 async def _send_balance(message: Message):
     uid = message.from_user.id
     db_get_or_create_user(message.from_user)
+
+    if not await _require_sub_message(message):
+        return
+
     user = db_get_user(uid)
     if not user:
         return
@@ -1295,32 +1638,44 @@ async def cmd_balance_slash(message: Message):
 async def cmd_low_priority_text(message: Message):
     text = (message.text or "").strip()
 
-    # ── Рулетка: лог (лог / log) ──
+    # ── Рулетка: лог ──
     if is_roulette_log(text):
+        if not await _require_sub_message(message):
+            return
         await handle_roulette_log(message)
         return
 
-    # ── Рулетка: текстовая ставка (100 7 / 100 к / 100 чет) ──
+    # ── Рулетка: текстовая ставка ──
     if is_roulette_bet(text):
+        if not await _require_sub_message(message):
+            return
         await handle_roulette_bet(message)
         return
 
-    # ── Рулетка: «го» — запуск (участник, кулдаун 15 сек) ──
+    # ── Рулетка: «го» ──
     if is_roulette_go(text):
+        if not await _require_sub_message(message):
+            return
         await handle_roulette_go(message)
         return
 
-    # ── Дуэли (текстовые команды) ──
+    # ── Дуэли ──
     if is_duel_command(text):
+        if not await _require_sub_message(message):
+            return
         db_get_or_create_user(message.from_user)
         await handle_duel_command(message)
         return
 
     if is_mygames_command(text):
+        if not await _require_sub_message(message):
+            return
         await handle_mygames(message)
         return
 
     if is_del_command(text):
+        if not await _require_sub_message(message):
+            return
         await handle_del(message)
         return
 
