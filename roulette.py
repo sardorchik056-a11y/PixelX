@@ -557,7 +557,7 @@ async def cmd_r(message: Message) -> None:
     parts = text.split(None, 1)
     if len(parts) < 2:
         await message.reply(
-            "<tg-emoji emoji-id="5334544901428229844">🎟</tg-emoji> <b>Инструкция</b>\n\n"
+            '<tg-emoji emoji-id="5334544901428229844">🎟</tg-emoji> <b>Инструкция</b>\n\n'
             "<blockquote>"
             "<code>100 7</code>        — число 7 (×35)\n"
             "<code>100 5-17-32</code>  — числа 5,17,32 (×35 каждое)\n"
