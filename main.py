@@ -23,6 +23,7 @@ import gold as _gold_module
 import treyd as _treyd_module
 import helper as _helper_module
 import duels as _duels_module
+import roulette as _roulette_module
 
 from mine import mine_router, mine_watchdog
 from referrals import referral_router
@@ -43,9 +44,12 @@ from duels import (
     is_mygames_command,
     is_del_command,
 )
+from roulette import roulette_router, handle_roulette_go, is_roulette_go
 
 from database import (
     init_db,
+    db_roulette_save_result,
+    db_roulette_get_last,
     db_get_or_create_user,
     db_get_user,
     db_get_px,
@@ -125,8 +129,8 @@ EMOJI_BONUS       = "5305699699204837855"
 EMOJI_CHAT        = "5303138782004924588"
 EMOJI_NEWS        = "5201691993775818138"
 EMOJI_SUPPORT     = "5907025791006283345"
-EMOJI_ACTIV = "5271604874419647061"
-EMOJI_NEET = "5206607081334906820"
+EMOJI_ACTIV       = "5271604874419647061"
+EMOJI_NEET        = "5206607081334906820"
 
 # ─────────────────────────────────────────
 #  Owner guard
@@ -187,6 +191,20 @@ def inject_to_modules(bot: Bot):
     setup_duels(bot, _DuelsStorage())
     _duels_module.set_owner_fn = is_owner
     _duels_module.set_owner_fn = set_owner
+    # ── Рулетка ──
+    _roulette_module.set_bot_ref(bot)
+    _roulette_module.set_db_fns(
+        db_get_px,
+        db_add_px,
+        db_try_spend_px,
+        db_get_or_create_user,
+    )
+    _roulette_module.set_db_log_fns(
+        db_roulette_save_result,
+        db_roulette_get_last,
+    )
+    _roulette_module.is_owner_fn  = is_owner
+    _roulette_module.set_owner_fn = set_owner
 
 
 # ─────────────────────────────────────────
@@ -210,9 +228,10 @@ dp.include_router(game_router)
 dp.include_router(tower_router)
 dp.include_router(mines_router)
 dp.include_router(gold_router)
-dp.include_router(exchange_router)   # ← Биржа
-dp.include_router(duels_router)      # ← Дуэли
+dp.include_router(exchange_router)
+dp.include_router(duels_router)
 dp.include_router(helper_router)
+dp.include_router(roulette_router)
 
 low_priority_router = Router()
 
@@ -463,16 +482,16 @@ DEV_SECTIONS: dict = {}
 #  Топ-10 по балансу
 # ─────────────────────────────────────────
 EMOJI_LEADERS_PLACE = [
-    "5440539497383087970",   # 1 место
-    "5447203607294265305",   # 2 место
-    "5453902265922376865",   # 3 место
-    "5382054253403577563",   # 4 место
-    "5391197405553107640",   # 5 место
-    "5390966190283694453",   # 6 место
-    "5382132232829804982",   # 7 место
-    "5391038994274329680",   # 8 место
-    "5391234698754138414",   # 9 место
-    "5393480373944459905",  # 10 место
+    "5440539497383087970",
+    "5447203607294265305",
+    "5453902265922376865",
+    "5382054253403577563",
+    "5391197405553107640",
+    "5390966190283694453",
+    "5382132232829804982",
+    "5391038994274329680",
+    "5391234698754138414",
+    "5393480373944459905",
 ]
 
 
@@ -490,9 +509,9 @@ def build_leaders_text() -> str:
     lines = []
     for i, user in enumerate(top):
         emoji_id = EMOJI_LEADERS_PLACE[i]
-        name = f"{user['first_name']} {user.get('last_name') or ''}".strip() or "—"
+        name  = f"{user['first_name']} {user.get('last_name') or ''}".strip() or "—"
         uname = f"@{user['username']}" if user.get("username") else name
-        px = user["px"]
+        px    = user["px"]
         lines.append(
             f'<tg-emoji emoji-id="{emoji_id}">⭐</tg-emoji>  '
             f'{uname} — <b>{px:,.2f} Px</b>'
@@ -553,12 +572,8 @@ async def _activate_promo(uid: int, code: str) -> str:
 import secrets
 
 _checks: dict[str, dict] = {}
-# check_id → {amount, max_uses, used_count, used_by: set, created_by}
-
-# Username бота — заполняется при старте для deeplink-кнопки
 _BOT_USERNAME: str = ""
 
-# Картинки для конкретных сумм (точное совпадение)
 _CHECK_IMAGES: dict[float, str] = {
     500.0:  "https://i.postimg.cc/G9Vh9XxC/Chat-GPT-Image-8-mar-2026-g-15-11-13.png",
     1000.0: "https://i.postimg.cc/7bdYbKn4/Chat-GPT-Image-8-mar-2026-g-15-10-51.png",
@@ -590,9 +605,7 @@ def _check_keyboard(check_id: str, exhausted: bool = False) -> InlineKeyboardMar
 
 
 def _build_check_caption(check: dict) -> str:
-    amt      = check['amount']
-    left     = check['max_uses'] - check['used_count']
-    max_uses = check['max_uses']
+    amt = check['amount']
     return (
         f'<tg-emoji emoji-id="5201691993775818138">💰</tg-emoji> <b>Чек на {amt:,.2f}Px </b>\n\n'
     )
@@ -653,11 +666,7 @@ async def cmd_addcheck(message: Message):
     if image_url:
         from aiogram.types import URLInputFile
         photo = URLInputFile(image_url)
-        await message.answer_photo(
-            photo=photo,
-            caption=caption,
-            reply_markup=keyboard,
-        )
+        await message.answer_photo(photo=photo, caption=caption, reply_markup=keyboard)
     else:
         await message.answer(caption, reply_markup=keyboard)
 
@@ -1158,7 +1167,7 @@ async def cmd_add_px(message: Message):
         action = 'списано'
         sign   = '-'
 
-    new_balance = db_get_px(target_uid)
+    new_balance  = db_get_px(target_uid)
     display_name = f"@{target['username']}" if target['username'] else target['first_name']
 
     await message.answer(
@@ -1189,7 +1198,6 @@ async def cmd_add_px(message: Message):
 #  /reck — рассылка всем пользователям (только админ)
 # ─────────────────────────────────────────
 def _db_get_all_user_ids() -> list[int]:
-    """Вернуть список всех ID пользователей из базы."""
     from database import get_conn
     with get_conn() as conn:
         rows = conn.execute("SELECT id FROM users").fetchall()
@@ -1231,7 +1239,6 @@ async def cmd_reck(message: Message, command: CommandObject):
             sent_ok += 1
         except Exception:
             sent_fail += 1
-        # небольшая задержка чтобы не словить flood от Telegram
         await asyncio.sleep(0.05)
 
     await bot.edit_message_text(
@@ -1250,7 +1257,7 @@ async def cmd_reck(message: Message, command: CommandObject):
 
 
 # ─────────────────────────────────────────
-#  Баланс — вспомогательная функция
+#  Баланс
 # ─────────────────────────────────────────
 _BALANCE_WORDS = {
     "б", "b",
@@ -1274,7 +1281,6 @@ async def _send_balance(message: Message):
     )
 
 
-# /b  /б  /bal  /balance  /баланс  /бал  /балик
 @dp.message(Command("b", "б", "bal", "balance", "баланс", "бал", "балик"))
 async def cmd_balance_slash(message: Message):
     await _send_balance(message)
@@ -1283,6 +1289,13 @@ async def cmd_balance_slash(message: Message):
 @low_priority_router.message(F.text)
 async def cmd_low_priority_text(message: Message):
     text = (message.text or "").strip()
+
+    # ── Рулетка «го» — проверяем ПЕРВЫМ ──
+    if is_roulette_go(text):
+        handled = await handle_roulette_go(message)
+        if handled:
+            return
+        # если нет ставок или пользователь не участник — молча игнорируем
 
     # ── Дуэли (текстовые команды) ──
     if is_duel_command(text):
@@ -1322,8 +1335,8 @@ async def main():
     await bot.delete_webhook(drop_pending_updates=True)
     print("✅ Webhook удален")
 
-    bot_info = await bot.get_me()
-    _BOT_USERNAME = bot_info.username
+    bot_info       = await bot.get_me()
+    _BOT_USERNAME  = bot_info.username
     print(f"✅ Бот: @{_BOT_USERNAME}")
 
     init_db()
