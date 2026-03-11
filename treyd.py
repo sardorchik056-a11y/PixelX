@@ -475,6 +475,15 @@ async def handle_sell_amount(message: Message, state: FSMContext):
     except ValueError:
         return
 
+    # Удаляем сообщение бота с просьбой ввести сумму из чата
+    if sell_msg_id:
+        try:
+            await _bot_ref.delete_message(chat_id=uid, message_id=sell_msg_id)
+        except Exception:
+            pass
+        sell_msg_id = None
+        await state.update_data(sell_msg_id=None)
+
     async def _err(text: str):
         new_mid = await _edit_or_send(uid, sell_msg_id, text, _kb_cancel_sell())
         if new_mid and new_mid != sell_msg_id:
