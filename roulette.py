@@ -52,8 +52,8 @@ def set_db_log_fns(save_result_fn, get_last_fn) -> None:
 # ─────────────────────────────────────────
 #  Константы
 # ─────────────────────────────────────────
-MAX_BETS_PER_PLAYER = 20
-MAX_BETS_TOTAL      = 100
+MAX_BETS_PER_PLAYER = 36
+MAX_BETS_TOTAL      = 200
 AUTO_START_DELAY    = 120
 GO_COOLDOWN         = 15
 
