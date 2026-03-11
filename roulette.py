@@ -368,7 +368,7 @@ async def _execute_game(chat_id: int) -> None:
             pass
 
         ce    = _ce(color)
-        lines = [f"🎰 <b>Рулетка!</b>  {ce} <b>{result}</b>\n"]
+        lines = [f'<tg-emoji emoji-id="5341498088408234504">🎟</tg-emoji><b>Рулетка!</b>  {ce} <b>{result}</b>\n']
 
         win_lines:  list[str] = []
         lose_lines: list[str] = []
@@ -394,12 +394,12 @@ async def _execute_game(chat_id: int) -> None:
                 )
 
         if win_lines:
-            lines.append("<b>Победители:</b>")
+            lines.append('<tg-emoji emoji-id="5429651785352501917">🎟</tg-emoji><b>Победители:</b>')
             lines += win_lines
         if lose_lines:
             if win_lines:
                 lines.append("")
-            lines.append("<b>Проигравшие:</b>")
+            lines.append("<tg-emoji emoji-id="5429518319243775957">🎟</tg-emoji><b>Проигравшие:</b>")
             lines += lose_lines
 
         _push_history(chat_id, result, color)
@@ -423,7 +423,7 @@ async def _execute_game(chat_id: int) -> None:
         try:
             await _bot.send_message(
                 chat_id,
-                "⚠️ <b>Ошибка рулетки. Ставки возвращены.</b>",
+                "⚠️ <b>Ошибка рулетки. Ставки возвращены!</b>",
                 parse_mode=ParseMode.HTML,
             )
         except Exception:
