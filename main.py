@@ -1063,8 +1063,11 @@ async def cb_sub_check(call: CallbackQuery, state: FSMContext):
     ok, unsub = await check_subscribed(call.bot, uid)
     if not ok:
         await call.answer("❌ Вы ещё не подписались на все каналы!", show_alert=True)
-        await call.message.edit_text(sub_text(unsub), reply_markup=sub_keyboard(unsub))
-        set_owner(call.message.message_id, uid)
+        try:
+            await call.message.edit_text(sub_text(unsub), reply_markup=sub_keyboard(unsub))
+            set_owner(call.message.message_id, uid)
+        except Exception:
+            pass
         return
 
     # Подписан — пробуем начислить реферальную награду.
