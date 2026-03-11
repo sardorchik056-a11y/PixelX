@@ -192,6 +192,23 @@ async def save_game_result(uid: int, _game_name: str, won: float, bet: float = 0
     db_record_game_result(uid, bet, won)
 
 
+def db_update_game_stats(uid: int, won: float = 0.0, lost: float = 0.0) -> None:
+    """
+    Обновляет статистику игрока для рулетки.
+    - won  > 0: чистая прибыль (без учёта возврата ставки)
+    - lost > 0: проигранная сумма (полная ставка)
+    Каждый вызов увеличивает games_played на 1.
+    """
+    with get_conn() as conn:
+        conn.execute("""
+            UPDATE users
+            SET games_played = games_played + 1,
+                total_won    = ROUND(total_won  + ?, 2),
+                total_lost   = ROUND(total_lost + ?, 2)
+            WHERE id = ?
+        """, (won, lost, uid))
+
+
 def _row_to_user(row: dict) -> dict:
     row["registered_at"] = datetime.fromisoformat(row["registered_at"])
     return row
