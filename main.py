@@ -44,7 +44,12 @@ from duels import (
     is_mygames_command,
     is_del_command,
 )
-from roulette import roulette_router, handle_roulette_go, is_roulette_go, is_roulette_bet, handle_roulette_bet
+from roulette import (
+    roulette_router,
+    handle_roulette_go, is_roulette_go,
+    handle_roulette_bet, is_roulette_bet,
+    handle_roulette_log, is_roulette_log,
+)
 
 from database import (
     init_db,
@@ -1290,15 +1295,19 @@ async def cmd_balance_slash(message: Message):
 async def cmd_low_priority_text(message: Message):
     text = (message.text or "").strip()
 
+    # ── Рулетка: лог (лог / log) ──
+    if is_roulette_log(text):
+        await handle_roulette_log(message)
+        return
+
     # ── Рулетка: текстовая ставка (100 7 / 100 к / 100 чет) ──
     if is_roulette_bet(text):
         await handle_roulette_bet(message)
         return
 
-    # ── Рулетка: «го» — запуск игры ──
+    # ── Рулетка: «го» — запуск (участник, кулдаун 15 сек) ──
     if is_roulette_go(text):
         await handle_roulette_go(message)
-        # молча игнорируем если нет ставок или пользователь не участник
         return
 
     # ── Дуэли (текстовые команды) ──
