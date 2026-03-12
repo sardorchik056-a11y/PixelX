@@ -1013,6 +1013,11 @@ async def cmd_start(message: Message, command: CommandObject, state: FSMContext)
 # ─────────────────────────────────────────
 @dp.callback_query(F.data == "sub_check")
 async def cb_sub_check(call: CallbackQuery, state: FSMContext):
+    # ── ИЗМЕНЕНИЕ: проверка владельца сообщения ──
+    if not is_owner(call.message.message_id, call.from_user.id):
+        await call.answer("🚫 Это не ваша кнопка!", show_alert=True)
+        return
+
     uid = call.from_user.id
     ok, unsub = await check_subscribed(call.bot, uid)
     if not ok:
