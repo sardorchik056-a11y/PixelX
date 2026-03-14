@@ -465,10 +465,9 @@ async def tower_cell_handler(callback: CallbackQuery, state: FSMContext):
             bet  = session['bet']
             name = _nickname(callback.from_user)
 
-            async with _get_user_lock(user_id):
-                if session.get('finishing'): return
-                session['finishing'] = True
-                _sessions.pop(user_id, None)
+            if session.get('finishing'): return
+            session['finishing'] = True
+            _sessions.pop(user_id, None)
 
             _cancel_timeout(user_id)
             # Удаляем из БД — проигрыш
@@ -506,10 +505,9 @@ async def tower_cell_handler(callback: CallbackQuery, state: FSMContext):
                 bet  = session['bet']
                 name = _nickname(callback.from_user)
 
-                async with _get_user_lock(user_id):
-                    if session.get('finishing'): return
-                    session['finishing'] = True
-                    _sessions.pop(user_id, None)
+                if session.get('finishing'): return
+                session['finishing'] = True
+                _sessions.pop(user_id, None)
 
                 winnings = round(bet * mult, 2)
                 db_add_px(user_id, winnings)
