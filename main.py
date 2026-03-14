@@ -30,7 +30,9 @@ from referrals import referral_router
 from bonus import bonus_router
 from game import game_router, game_low_router, init_game
 from tower import tower_router
-from mines import mines_router
+from mines import mines_router, restore_sessions_from_db as mines_restore_sessions
+from gold import gold_router, restore_sessions_from_db as gold_restore_sessions
+from tower import tower_router, restore_sessions_from_db as tower_restore_sessions
 from gold import gold_router
 from treyd import exchange_router, exchange_watchdog
 from helper import helper_router
@@ -1013,7 +1015,6 @@ async def cmd_start(message: Message, command: CommandObject, state: FSMContext)
 # ─────────────────────────────────────────
 @dp.callback_query(F.data == "sub_check")
 async def cb_sub_check(call: CallbackQuery, state: FSMContext):
-    # ── ИЗМЕНЕНИЕ: проверка владельца сообщения ──
     if not is_owner(call.message.message_id, call.from_user.id):
         await call.answer("🚫 Это не ваша кнопка!", show_alert=True)
         return
@@ -1673,6 +1674,13 @@ async def main():
 
     init_db()
     init_exchange_db()
+
+    # ── Восстанавливаем активные игры после рестарта ──
+    mines_restore_sessions()
+    gold_restore_sessions()
+    tower_restore_sessions()
+    print("✅ Сессии игр восстановлены")
+
     inject_to_modules(bot)
     asyncio.create_task(mine_watchdog())
     asyncio.create_task(exchange_watchdog())
