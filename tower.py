@@ -84,10 +84,10 @@ is_owner_fn  = _noop_is_owner
 
 
 # ── Восстановление сессий из БД при старте ─────────────────────────
-def restore_sessions_from_db() -> None:
+def restore_sessions_from_db(bot: Bot) -> None:
     """
     Вызывается один раз при старте бота.
-    Восстанавливает активные игры из БД в память.
+    Восстанавливает активные игры из БД в память и запускает таймеры.
     Ставка НЕ возвращается — игра продолжается с того же места.
     """
     sessions = db_tower_load_all_sessions()
@@ -97,6 +97,8 @@ def restore_sessions_from_db() -> None:
         msg_id = s.get('message_id')
         if msg_id:
             _game_board_owner[msg_id] = uid
+        # Запускаем таймер бездействия для восстановленной сессии
+        _start_timeout(uid, bot)
     if sessions:
         logging.info(f"[tower] Восстановлено {len(sessions)} сессий из БД")
 
@@ -131,10 +133,11 @@ async def _inactivity_watcher(user_id: int, bot: Bot):
 
     lock = _get_user_lock(user_id)
     async with lock:
-        session = _sessions.pop(user_id, None)
+        session = _sessions.get(user_id)
         if session is None or session.get('finishing'):
             return
         session['finishing'] = True
+        _sessions.pop(user_id, None)
 
     # Удаляем из БД
     db_tower_delete_session(user_id)
@@ -446,9 +449,9 @@ async def tower_cell_handler(callback: CallbackQuery, state: FSMContext):
             await callback.answer(); return
         processing.add(col)
 
-    try:
-        _start_timeout(user_id, callback.bot)
+    _start_timeout(user_id, callback.bot)
 
+    try:
         floor_data = session['floors'][floor_idx]
         floor_data['chosen'] = col
         difficulty = session['difficulty']
