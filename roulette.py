@@ -67,6 +67,43 @@ BET_RATE_LIMIT      = 2.0
 MULTIPLIER_NUMBER   = 35.0
 MULTIPLIER_OTHER    = 1.9
 
+# ── Множители для диапазонов (по количеству чисел в диапазоне) ──
+# 2 числа → 18x, 3 → 12x, 4 → 8x, 5 → 6x, 6 → 5x,
+# 7 → 4.5x, 8 → 4x, 9 → 3.5x, 10 → 3x,
+# 11-13 → 2.7x, 14-18 → 2x, 19-25 → 1.4x, 26-30 → 1.1x
+RANGE_MULTIPLIERS: dict[int, float] = {
+    2:  18.0,
+    3:  12.0,
+    4:  8.0,
+    5:  6.0,
+    6:  5.0,
+    7:  4.5,
+    8:  4.0,
+    9:  3.5,
+    10: 3.0,
+    11: 2.7,
+    12: 2.7,
+    13: 2.7,
+    14: 2.0,
+    15: 2.0,
+    16: 2.0,
+    17: 2.0,
+    18: 2.0,
+    19: 1.4,
+    20: 1.4,
+    21: 1.4,
+    22: 1.4,
+    23: 1.4,
+    24: 1.4,
+    25: 1.4,
+    26: 1.1,
+    27: 1.1,
+    28: 1.1,
+    29: 1.1,
+    30: 1.1,
+}
+RANGE_MAX_SIZE = 30  # максимальный размер диапазона
+
 RED_NUMBERS   = frozenset({1, 3, 5, 7, 9, 12, 14, 16, 18,
                             19, 21, 23, 25, 27, 30, 32, 34, 36})
 BLACK_NUMBERS = frozenset({2, 4, 6, 8, 10, 11, 13, 15, 17,
@@ -164,6 +201,10 @@ def _ce(color: str) -> str:
 def _check_win(bet_type: str, bet_value, result: int) -> bool:
     if bet_type == "number":
         return result == bet_value
+    if bet_type == "range":
+        # bet_value = (lo, hi) — включительно
+        lo, hi = bet_value
+        return lo <= result <= hi
     if bet_type == "red":
         return result in RED_NUMBERS
     if bet_type == "black":
@@ -175,11 +216,22 @@ def _check_win(bet_type: str, bet_value, result: int) -> bool:
     return False
 
 
-def _mult(bet_type: str) -> float:
-    return MULTIPLIER_NUMBER if bet_type == "number" else MULTIPLIER_OTHER
+def _mult(bet_type: str, bet_value=None) -> float:
+    if bet_type == "number":
+        return MULTIPLIER_NUMBER
+    if bet_type == "range":
+        lo, hi = bet_value
+        size = hi - lo + 1
+        return RANGE_MULTIPLIERS.get(size, 1.0)
+    return MULTIPLIER_OTHER
 
 
 def _bet_label(bet_type: str, bet_value) -> str:
+    if bet_type == "range":
+        lo, hi = bet_value
+        size = hi - lo + 1
+        mult = RANGE_MULTIPLIERS.get(size, 1.0)
+        return f"Диапазон {lo}–{hi} (×{mult})"
     labels = {
         "number": f"Число {bet_value}",
         "red":    "🔴 Красное",
@@ -198,6 +250,36 @@ def _user_link(uid: int, username, fname: str) -> str:
 
 def _count_player_bets(game: dict, uid: int) -> int:
     return sum(1 for b in game["bets"] if b["uid"] == uid)
+
+
+# ─────────────────────────────────────────
+#  Парсер диапазона
+#  Принимает строку вида "5-20" или "0-10"
+#  Возвращает (lo, hi) или None
+# ─────────────────────────────────────────
+def _parse_range(text: str):
+    """
+    Парсит диапазон вида 'lo-hi', например '5-20', '0-36'.
+    Возвращает (lo, hi) если корректно, иначе None.
+    Условия:
+      - lo < hi
+      - lo >= 0, hi <= 36
+      - размер (hi - lo + 1) <= RANGE_MAX_SIZE
+      - размер >= 2
+    """
+    m = re.match(r'^(\d+)-(\d+)$', text.strip())
+    if not m:
+        return None
+    lo = int(m.group(1))
+    hi = int(m.group(2))
+    if lo >= hi:
+        return None
+    if lo < 0 or hi > 36:
+        return None
+    size = hi - lo + 1
+    if size < 2 or size > RANGE_MAX_SIZE:
+        return None
+    return (lo, hi)
 
 
 # ─────────────────────────────────────────
@@ -238,23 +320,34 @@ def _parse_bet(text: str):
     elif bet_raw in _BLACK_WORDS:
         new_bets = [("black", None)]
     else:
-        normalized = bet_raw.replace("-", " ")
-        parts = [p.strip() for p in normalized.split() if p.strip()]
-        if not parts:
-            return None
-
-        num_counts: dict[int, int] = {}
-        for part in parts:
-            if not part.isdigit():
+        # ── Проверяем диапазон: одно выражение вида "lo-hi" ──
+        # Сначала смотрим — похоже ли вообще на диапазон (два числа через дефис)
+        _looks_like_range = re.match(r'^\d+-\d+$', bet_raw)
+        if _looks_like_range:
+            # Выглядит как диапазон — парсим строго
+            range_result = _parse_range(bet_raw)
+            if range_result is None:
+                # Диапазон есть, но некорректный — сообщаем об ошибке
+                return ("range_error", bet_raw)
+            new_bets = [("range", range_result)]
+        else:
+            # ── Числа (одиночные или через пробел) ──
+            parts = [p.strip() for p in bet_raw.split() if p.strip()]
+            if not parts:
                 return None
-            n = int(part)
-            if n > 36:
-                return None
-            num_counts[n] = num_counts.get(n, 0) + 1
 
-        for n, count in num_counts.items():
-            for _ in range(count):
-                new_bets.append(("number", n))
+            num_counts: dict[int, int] = {}
+            for part in parts:
+                if not part.isdigit():
+                    return None
+                n = int(part)
+                if n > 36:
+                    return None
+                num_counts[n] = num_counts.get(n, 0) + 1
+
+            for n, count in num_counts.items():
+                for _ in range(count):
+                    new_bets.append(("number", n))
 
     if not new_bets:
         return None
@@ -271,8 +364,6 @@ async def _auto_start_coro(chat_id: int) -> None:
         game = _get_game(chat_id)
         if game["running"] or not game["bets"]:
             return
-        # Удаляем себя из словаря ДО вызова _execute_game,
-        # чтобы _cancel_auto внутри не пытался отменить уже работающую задачу
         _auto_tasks.pop(chat_id, None)
         try:
             await _bot.send_message(
@@ -307,7 +398,6 @@ def _cancel_auto(chat_id: int) -> None:
 async def _execute_game(chat_id: int) -> None:
     game = _get_game(chat_id)
 
-    # ── Атомарно захватываем ставки ──
     async with game["lock"]:
         if game["running"]:
             log.debug("_execute_game: already running for chat %s", chat_id)
@@ -318,14 +408,11 @@ async def _execute_game(chat_id: int) -> None:
 
         game["running"]        = True
         game["first_bet_time"] = None
-        # Отменяем авто-таймер только если он ещё жив
-        # (при вызове из auto_start_coro задача уже удалена из словаря)
         _cancel_auto(chat_id)
 
         bets         = game["bets"][:]
         game["bets"] = []
 
-    # ── Весь IO идёт за пределами lock ──
     log.info("_execute_game: spinning for chat %s, bets=%d", chat_id, len(bets))
 
     result     = random.randint(0, 36)
@@ -334,17 +421,14 @@ async def _execute_game(chat_id: int) -> None:
     stk_msg    = None
 
     try:
-        # ── Стикер ──
         try:
             stk_msg = await _bot.send_sticker(chat_id, sticker_id)
             log.info("_execute_game: sticker sent msg_id=%s", stk_msg.message_id)
         except Exception as e:
             log.warning("_execute_game: send_sticker failed: %s", e)
 
-        # Ждём показа стикера — shield защищает sleep от внешней отмены
         await asyncio.shield(asyncio.sleep(3))
 
-        # Удаляем стикер
         if stk_msg is not None:
             try:
                 await _bot.delete_message(chat_id, stk_msg.message_id)
@@ -352,7 +436,6 @@ async def _execute_game(chat_id: int) -> None:
             except Exception as e:
                 log.warning("_execute_game: delete sticker failed: %s", e)
 
-        # ── Считаем результаты ──
         ce    = _ce(color)
         lines = [f'<tg-emoji emoji-id="5341498088408234504">🎟</tg-emoji><b>Рулетка!</b>  {ce} <b>{result}</b>\n']
 
@@ -368,7 +451,8 @@ async def _execute_game(chat_id: int) -> None:
             label = _bet_label(bt, bv)
 
             if _check_win(bt, bv, result):
-                payout = round(amt * _mult(bt), 2)
+                mult   = _mult(bt, bv)
+                payout = round(amt * mult, 2)
                 profit = round(payout - amt, 2)
                 try:
                     _db_add_px(uid, payout)
@@ -413,7 +497,6 @@ async def _execute_game(chat_id: int) -> None:
         log.info("_execute_game: done chat=%s result=%d", chat_id, result)
 
     except BaseException as ex:
-        # BaseException ловит и Exception и CancelledError
         log.exception("_execute_game CRITICAL error chat=%s: %s", chat_id, ex)
         for b in bets:
             try:
@@ -524,7 +607,9 @@ async def _place_bet(message: Message, amount: float, new_bets: list) -> None:
 
     conf_lines: list[str] = ['<tg-emoji emoji-id="5206607081334906820">🎟</tg-emoji><b>Ставки приняты!</b>\n']
     for bt, bv in new_bets:
-        conf_lines.append(f"<blockquote><b><code>{amount:,.2f} Px</code></b> — <b>{_bet_label(bt, bv)}</b></blockquote>")
+        conf_lines.append(
+            f"<blockquote><b><code>{amount:,.2f} Px</code></b> — <b>{_bet_label(bt, bv)}</b></blockquote>"
+        )
 
     conf_lines.append(
         "\n<blockquote>"
@@ -559,19 +644,14 @@ async def _cancel_bets(message: Message) -> None:
         )
         return
 
-    # Считаем сумму возврата
     refund_total = round(sum(b["amount"] for b in player_bets), 2)
-
-    # Удаляем ставки игрока из списка
     game["bets"] = [b for b in game["bets"] if b["uid"] != uid]
 
-    # Возвращаем деньги
     try:
         _db_add_px(uid, refund_total)
     except Exception as e:
         log.error("_cancel_bets: db_add_px failed uid=%s: %s", uid, e)
 
-    # Если ставок в раунде больше нет — отменяем автозапуск
     if not game["bets"]:
         _cancel_auto(chat_id)
         game["first_bet_time"] = None
@@ -605,7 +685,13 @@ async def cmd_r(message: Message) -> None:
             "<code>100 к</code>           — красное (×1.9)\n"
             "<code>100 ч</code>           — чёрное (×1.9)\n"
             "<code>100 чет</code>         — чётное (×1.9)\n"
-            "<code>100 нечет</code>       — нечётное (×1.9)\n\n"
+            "<code>100 нечет</code>       — нечётное (×1.9)\n"
+            "<code>100 5-20</code>        — диапазон 5–20 (16 чисел, ×2.0)\n\n"
+            "<b>Множители диапазонов:</b>\n"
+            "<code>2 числа → ×18  |  3 → ×12  |  4 → ×8</code>\n"
+            "<code>5 → ×6  |  6 → ×5  |  7 → ×4.5  |  8 → ×4</code>\n"
+            "<code>9 → ×3.5  |  10 → ×3  |  11–13 → ×2.7</code>\n"
+            "<code>14–18 → ×2  |  19–25 → ×1.4  |  26–30 → ×1.1</code>\n\n"
             "<code>го</code>              — запустить игру\n"
             "<code>лог</code>             — последние 10 результатов\n"
             "<code>отмена / cancel</code> — отменить свои ставки\n\n"
@@ -620,6 +706,16 @@ async def cmd_r(message: Message) -> None:
     if parsed is None:
         await message.reply(
             "❌ Не могу распознать ставку!\n",
+            parse_mode=ParseMode.HTML,
+        )
+        return
+    if isinstance(parsed, tuple) and parsed[0] == "range_error":
+        await message.reply(
+            f"❌ Некорректный диапазон <code>{parsed[1]}</code>\n\n"
+            f"<blockquote>Диапазон должен быть вида <code>lo-hi</code>, где:\n"
+            f"• lo &lt; hi\n"
+            f"• оба числа от 0 до 36\n"
+            f"• размер диапазона от 2 до {RANGE_MAX_SIZE} чисел</blockquote>",
             parse_mode=ParseMode.HTML,
         )
         return
@@ -711,13 +807,29 @@ async def handle_roulette_go(message: Message) -> bool:
 
 
 def is_roulette_bet(text: str) -> bool:
-    return _parse_bet(text) is not None
+    result = _parse_bet(text)
+    if result is None:
+        return False
+    # range_error тоже нужно обработать (покажем ошибку пользователю)
+    if isinstance(result, tuple) and result[0] == "range_error":
+        return True
+    return True
 
 
 async def handle_roulette_bet(message: Message) -> bool:
     parsed = _parse_bet((message.text or "").strip())
     if parsed is None:
         return False
+    if isinstance(parsed, tuple) and parsed[0] == "range_error":
+        await message.reply(
+            f"❌ Некорректный диапазон <code>{parsed[1]}</code>\n\n"
+            f"<blockquote>Диапазон должен быть вида <code>lo-hi</code>, где:\n"
+            f"• lo &lt; hi\n"
+            f"• оба числа от 0 до 36\n"
+            f"• размер от 2 до {RANGE_MAX_SIZE} чисел</blockquote>",
+            parse_mode=ParseMode.HTML,
+        )
+        return True
     amount, new_bets = parsed
     await _place_bet(message, amount, new_bets)
     return True
