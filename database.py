@@ -106,6 +106,7 @@ def init_db():
                 gems_opened    INTEGER NOT NULL DEFAULT 0,
                 message_id     INTEGER,
                 chat_id        INTEGER NOT NULL,
+                owner_id       INTEGER NOT NULL DEFAULT 0,
                 created_at     TEXT    NOT NULL
             );
 
@@ -117,6 +118,7 @@ def init_db():
                 floors         TEXT    NOT NULL,
                 message_id     INTEGER,
                 chat_id        INTEGER NOT NULL,
+                owner_id       INTEGER NOT NULL DEFAULT 0,
                 created_at     TEXT    NOT NULL
             );
 
@@ -129,9 +131,17 @@ def init_db():
                 floors         TEXT    NOT NULL,
                 message_id     INTEGER,
                 chat_id        INTEGER NOT NULL,
+                owner_id       INTEGER NOT NULL DEFAULT 0,
                 created_at     TEXT    NOT NULL
             );
         """)
+
+        # ── Миграция: добавляем owner_id если ещё нет (для старых БД) ──
+        for table in ("mines_sessions", "gold_sessions", "tower_sessions"):
+            cols = [r[1] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()]
+            if "owner_id" not in cols:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN owner_id INTEGER NOT NULL DEFAULT 0")
+
     print("✅ БД инициализирована")
 
 
@@ -484,8 +494,8 @@ def db_mines_save_session(uid: int, session: dict) -> None:
         conn.execute("""
             INSERT INTO mines_sessions
                 (uid, board, mine_positions, revealed, mines_count,
-                 bet, gems_opened, message_id, chat_id, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 bet, gems_opened, message_id, chat_id, owner_id, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(uid) DO UPDATE SET
                 board          = excluded.board,
                 mine_positions = excluded.mine_positions,
@@ -495,6 +505,7 @@ def db_mines_save_session(uid: int, session: dict) -> None:
                 gems_opened    = excluded.gems_opened,
                 message_id     = excluded.message_id,
                 chat_id        = excluded.chat_id,
+                owner_id       = excluded.owner_id,
                 created_at     = excluded.created_at
         """, (
             uid,
@@ -506,6 +517,7 @@ def db_mines_save_session(uid: int, session: dict) -> None:
             session.get('gems_opened', 0),
             session.get('message_id'),
             session['chat_id'],
+            session.get('owner_id', uid),
             now,
         ))
 
@@ -534,7 +546,7 @@ def db_mines_load_all_sessions() -> list[dict]:
             'chat_id':          row['chat_id'],
             'finishing':        False,
             'processing_cells': set(),
-            'owner_id':         row['uid'],
+            'owner_id':         row['owner_id'],
         })
     return result
 
@@ -559,8 +571,8 @@ def db_gold_save_session(uid: int, session: dict) -> None:
     with get_conn() as conn:
         conn.execute("""
             INSERT INTO gold_sessions
-                (uid, bet, current_floor, floors_passed, floors, message_id, chat_id, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                (uid, bet, current_floor, floors_passed, floors, message_id, chat_id, owner_id, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(uid) DO UPDATE SET
                 bet           = excluded.bet,
                 current_floor = excluded.current_floor,
@@ -568,6 +580,7 @@ def db_gold_save_session(uid: int, session: dict) -> None:
                 floors        = excluded.floors,
                 message_id    = excluded.message_id,
                 chat_id       = excluded.chat_id,
+                owner_id      = excluded.owner_id,
                 created_at    = excluded.created_at
         """, (
             uid,
@@ -577,6 +590,7 @@ def db_gold_save_session(uid: int, session: dict) -> None:
             _json.dumps(floors_data),
             session.get('message_id'),
             session['chat_id'],
+            session.get('owner_id', uid),
             now,
         ))
 
@@ -611,7 +625,7 @@ def db_gold_load_all_sessions() -> list[dict]:
             'chat_id':          row['chat_id'],
             'finishing':        False,
             'processing_cells': set(),
-            'owner_id':         row['uid'],
+            'owner_id':         row['owner_id'],
         })
     return result
 
@@ -636,8 +650,8 @@ def db_tower_save_session(uid: int, session: dict) -> None:
         conn.execute("""
             INSERT INTO tower_sessions
                 (uid, difficulty, bet, current_floor, floors_passed, floors,
-                 message_id, chat_id, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 message_id, chat_id, owner_id, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(uid) DO UPDATE SET
                 difficulty    = excluded.difficulty,
                 bet           = excluded.bet,
@@ -646,6 +660,7 @@ def db_tower_save_session(uid: int, session: dict) -> None:
                 floors        = excluded.floors,
                 message_id    = excluded.message_id,
                 chat_id       = excluded.chat_id,
+                owner_id      = excluded.owner_id,
                 created_at    = excluded.created_at
         """, (
             uid,
@@ -656,6 +671,7 @@ def db_tower_save_session(uid: int, session: dict) -> None:
             _json.dumps(floors_data),
             session.get('message_id'),
             session['chat_id'],
+            session.get('owner_id', uid),
             now,
         ))
 
@@ -691,6 +707,6 @@ def db_tower_load_all_sessions() -> list[dict]:
             'chat_id':          row['chat_id'],
             'finishing':        False,
             'processing_cells': set(),
-            'owner_id':         row['uid'],
+            'owner_id':         row['owner_id'],
         })
     return result
