@@ -1,5 +1,6 @@
 import sqlite3
 import json
+import json as _json
 from datetime import datetime
 from contextlib import contextmanager
 
@@ -94,6 +95,42 @@ def init_db():
             );
 
             CREATE INDEX IF NOT EXISTS idx_roulette_log_chat ON roulette_log(chat_id);
+
+            CREATE TABLE IF NOT EXISTS mines_sessions (
+                uid            INTEGER PRIMARY KEY,
+                board          TEXT    NOT NULL,
+                mine_positions TEXT    NOT NULL,
+                revealed       TEXT    NOT NULL,
+                mines_count    INTEGER NOT NULL,
+                bet            REAL    NOT NULL,
+                gems_opened    INTEGER NOT NULL DEFAULT 0,
+                message_id     INTEGER,
+                chat_id        INTEGER NOT NULL,
+                created_at     TEXT    NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS gold_sessions (
+                uid            INTEGER PRIMARY KEY,
+                bet            REAL    NOT NULL,
+                current_floor  INTEGER NOT NULL DEFAULT 0,
+                floors_passed  INTEGER NOT NULL DEFAULT 0,
+                floors         TEXT    NOT NULL,
+                message_id     INTEGER,
+                chat_id        INTEGER NOT NULL,
+                created_at     TEXT    NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS tower_sessions (
+                uid            INTEGER PRIMARY KEY,
+                difficulty     INTEGER NOT NULL,
+                bet            REAL    NOT NULL,
+                current_floor  INTEGER NOT NULL DEFAULT 0,
+                floors_passed  INTEGER NOT NULL DEFAULT 0,
+                floors         TEXT    NOT NULL,
+                message_id     INTEGER,
+                chat_id        INTEGER NOT NULL,
+                created_at     TEXT    NOT NULL
+            );
         """)
     print("✅ БД инициализирована")
 
@@ -435,3 +472,225 @@ def db_roulette_get_last(chat_id: int, limit: int = 10) -> list[dict]:
         """, (chat_id, limit)).fetchall()
     return [{"number": r["result_number"], "color": r["result_color"],
              "played_at": r["played_at"]} for r in rows]
+
+
+# ─────────────────────────────────────────
+#  Мины — персистентные сессии
+# ─────────────────────────────────────────
+def db_mines_save_session(uid: int, session: dict) -> None:
+    """Сохранить или обновить активную сессию игры в мины."""
+    now = datetime.now().isoformat()
+    with get_conn() as conn:
+        conn.execute("""
+            INSERT INTO mines_sessions
+                (uid, board, mine_positions, revealed, mines_count,
+                 bet, gems_opened, message_id, chat_id, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(uid) DO UPDATE SET
+                board          = excluded.board,
+                mine_positions = excluded.mine_positions,
+                revealed       = excluded.revealed,
+                mines_count    = excluded.mines_count,
+                bet            = excluded.bet,
+                gems_opened    = excluded.gems_opened,
+                message_id     = excluded.message_id,
+                chat_id        = excluded.chat_id,
+                created_at     = excluded.created_at
+        """, (
+            uid,
+            _json.dumps(session['board']),
+            _json.dumps(list(session['mine_positions'])),
+            _json.dumps(session['revealed']),
+            session['mines_count'],
+            session['bet'],
+            session.get('gems_opened', 0),
+            session.get('message_id'),
+            session['chat_id'],
+            now,
+        ))
+
+
+def db_mines_delete_session(uid: int) -> None:
+    """Удалить сессию игры в мины после завершения."""
+    with get_conn() as conn:
+        conn.execute("DELETE FROM mines_sessions WHERE uid = ?", (uid,))
+
+
+def db_mines_load_all_sessions() -> list[dict]:
+    """Загрузить все активные сессии мин при старте бота."""
+    with get_conn() as conn:
+        rows = conn.execute("SELECT * FROM mines_sessions").fetchall()
+    result = []
+    for row in rows:
+        result.append({
+            'uid':              row['uid'],
+            'board':            _json.loads(row['board']),
+            'mine_positions':   set(_json.loads(row['mine_positions'])),
+            'revealed':         _json.loads(row['revealed']),
+            'mines_count':      row['mines_count'],
+            'bet':              row['bet'],
+            'gems_opened':      row['gems_opened'],
+            'message_id':       row['message_id'],
+            'chat_id':          row['chat_id'],
+            'finishing':        False,
+            'processing_cells': set(),
+            'owner_id':         row['uid'],
+        })
+    return result
+
+
+# ─────────────────────────────────────────
+#  Золото — персистентные сессии
+# ─────────────────────────────────────────
+def db_gold_save_session(uid: int, session: dict) -> None:
+    """Сохранить или обновить активную сессию игры Золото."""
+    now = datetime.now().isoformat()
+
+    # floors содержит sets (bomb_col — int, chosen — int|None, is_bomb — bool|None)
+    # Сериализуем в список словарей с обычными типами
+    floors_data = []
+    for f in session['floors']:
+        floors_data.append({
+            'bomb_col': f['bomb_col'],
+            'chosen':   f['chosen'],
+            'is_bomb':  f['is_bomb'],
+        })
+
+    with get_conn() as conn:
+        conn.execute("""
+            INSERT INTO gold_sessions
+                (uid, bet, current_floor, floors_passed, floors, message_id, chat_id, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(uid) DO UPDATE SET
+                bet           = excluded.bet,
+                current_floor = excluded.current_floor,
+                floors_passed = excluded.floors_passed,
+                floors        = excluded.floors,
+                message_id    = excluded.message_id,
+                chat_id       = excluded.chat_id,
+                created_at    = excluded.created_at
+        """, (
+            uid,
+            session['bet'],
+            session['current_floor'],
+            session['floors_passed'],
+            _json.dumps(floors_data),
+            session.get('message_id'),
+            session['chat_id'],
+            now,
+        ))
+
+
+def db_gold_delete_session(uid: int) -> None:
+    """Удалить сессию игры Золото после завершения."""
+    with get_conn() as conn:
+        conn.execute("DELETE FROM gold_sessions WHERE uid = ?", (uid,))
+
+
+def db_gold_load_all_sessions() -> list[dict]:
+    """Загрузить все активные сессии Золото при старте бота."""
+    with get_conn() as conn:
+        rows = conn.execute("SELECT * FROM gold_sessions").fetchall()
+    result = []
+    for row in rows:
+        floors_raw = _json.loads(row['floors'])
+        floors = []
+        for f in floors_raw:
+            floors.append({
+                'bomb_col': f['bomb_col'],
+                'chosen':   f['chosen'],
+                'is_bomb':  f['is_bomb'],
+            })
+        result.append({
+            'uid':              row['uid'],
+            'bet':              row['bet'],
+            'current_floor':    row['current_floor'],
+            'floors_passed':    row['floors_passed'],
+            'floors':           floors,
+            'message_id':       row['message_id'],
+            'chat_id':          row['chat_id'],
+            'finishing':        False,
+            'processing_cells': set(),
+            'owner_id':         row['uid'],
+        })
+    return result
+
+
+# ─────────────────────────────────────────
+#  Башня — персистентные сессии
+# ─────────────────────────────────────────
+def db_tower_save_session(uid: int, session: dict) -> None:
+    """Сохранить или обновить активную сессию игры Башня."""
+    now = datetime.now().isoformat()
+
+    # floors содержит bomb_cols — set, chosen — int|None, is_bomb — bool|None
+    floors_data = []
+    for f in session['floors']:
+        floors_data.append({
+            'bomb_cols': list(f['bomb_cols']),
+            'chosen':    f['chosen'],
+            'is_bomb':   f['is_bomb'],
+        })
+
+    with get_conn() as conn:
+        conn.execute("""
+            INSERT INTO tower_sessions
+                (uid, difficulty, bet, current_floor, floors_passed, floors,
+                 message_id, chat_id, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(uid) DO UPDATE SET
+                difficulty    = excluded.difficulty,
+                bet           = excluded.bet,
+                current_floor = excluded.current_floor,
+                floors_passed = excluded.floors_passed,
+                floors        = excluded.floors,
+                message_id    = excluded.message_id,
+                chat_id       = excluded.chat_id,
+                created_at    = excluded.created_at
+        """, (
+            uid,
+            session['difficulty'],
+            session['bet'],
+            session['current_floor'],
+            session['floors_passed'],
+            _json.dumps(floors_data),
+            session.get('message_id'),
+            session['chat_id'],
+            now,
+        ))
+
+
+def db_tower_delete_session(uid: int) -> None:
+    """Удалить сессию игры Башня после завершения."""
+    with get_conn() as conn:
+        conn.execute("DELETE FROM tower_sessions WHERE uid = ?", (uid,))
+
+
+def db_tower_load_all_sessions() -> list[dict]:
+    """Загрузить все активные сессии Башня при старте бота."""
+    with get_conn() as conn:
+        rows = conn.execute("SELECT * FROM tower_sessions").fetchall()
+    result = []
+    for row in rows:
+        floors_raw = _json.loads(row['floors'])
+        floors = []
+        for f in floors_raw:
+            floors.append({
+                'bomb_cols': set(f['bomb_cols']),
+                'chosen':    f['chosen'],
+                'is_bomb':   f['is_bomb'],
+            })
+        result.append({
+            'uid':              row['uid'],
+            'difficulty':       row['difficulty'],
+            'bet':              row['bet'],
+            'current_floor':    row['current_floor'],
+            'floors_passed':    row['floors_passed'],
+            'floors':           floors,
+            'message_id':       row['message_id'],
+            'chat_id':          row['chat_id'],
+            'finishing':        False,
+            'processing_cells': set(),
+            'owner_id':         row['uid'],
+        })
+    return result
