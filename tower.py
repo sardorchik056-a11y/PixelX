@@ -10,6 +10,7 @@ tower.py — Башня (честная версия)
 import random
 import re
 import asyncio
+import time
 import logging
 from aiogram import Router, F, Bot
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, Message
@@ -44,6 +45,7 @@ INACTIVITY_TIMEOUT = 300
 
 MIN_BET = 10.0
 MAX_BET = 100_000_000.0
+CELL_COOLDOWN = 0.4  # секунд между кликами по ячейкам
 
 CELL_FUTURE      = "🌑"
 CELL_ACTIVE      = "🌑"
@@ -76,6 +78,7 @@ _timeout_tasks:    dict = {}
 _user_locks:       dict = {}
 _bet_locks:        dict = {}
 _game_board_owner: dict = {}
+_cell_cooldowns:   dict[int, float] = {}  # user_id → last_click_time
 
 def _noop_set_owner(message_id: int, user_id: int): pass
 def _noop_is_owner(message_id: int, user_id: int) -> bool: return True
@@ -438,6 +441,12 @@ async def tower_cell_handler(callback: CallbackQuery, state: FSMContext):
     processing = session.setdefault('processing_cells', set())
     if col in processing:
         await callback.answer(); return
+
+    # ── Кулдаун 0.4 сек между кликами (лимит Telegram API) ──
+    _now = time.monotonic()
+    if _now - _cell_cooldowns.get(user_id, 0) < CELL_COOLDOWN:
+        await callback.answer(); return
+    _cell_cooldowns[user_id] = _now
 
     lock = _get_user_lock(user_id)
     async with lock:
