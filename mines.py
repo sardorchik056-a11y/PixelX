@@ -449,9 +449,11 @@ async def mines_cell_handler(callback: CallbackQuery, state: FSMContext):
     user_id = caller_id
 
     if not session:
-        await callback.answer("🚫 Игра не найдена!", show_alert=True); return
+        # Сессия уже завершена (таймаут/мина), но кнопки ещё видны — тихо игнорируем
+        await callback.answer(); return
     if session.get('message_id') != msg_id:
-        await callback.answer("🚫 Это не ваша игра!", show_alert=True); return
+        # Старое сообщение от предыдущей игры — тихо игнорируем
+        await callback.answer(); return
     if session.get('finishing'):
         await callback.answer(); return
     if session['revealed'][idx]:
@@ -581,7 +583,7 @@ async def mines_cashout(callback: CallbackQuery, state: FSMContext):
     async with lock:
         session = _sessions.get(user_id)
         if not session:
-            await callback.answer("Игра не найдена.", show_alert=True); return
+            await callback.answer(); return
         if session.get('message_id') != msg_id:
             await callback.answer("🚫 Это не ваша игра!", show_alert=True); return
         if session.get('finishing'):
