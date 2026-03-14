@@ -17,7 +17,15 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.enums import ParseMode
 
-from database import db_get_px, db_add_px, db_try_spend_px, db_record_game_result
+from database import (
+    db_get_px,
+    db_add_px,
+    db_try_spend_px,
+    db_record_game_result,
+    db_tower_save_session,
+    db_tower_delete_session,
+    db_tower_load_all_sessions,
+)
 
 try:
     from leaders import record_game_result
@@ -75,6 +83,24 @@ set_owner_fn = _noop_set_owner
 is_owner_fn  = _noop_is_owner
 
 
+# ── Восстановление сессий из БД при старте ─────────────────────────
+def restore_sessions_from_db() -> None:
+    """
+    Вызывается один раз при старте бота.
+    Восстанавливает активные игры из БД в память.
+    Ставка НЕ возвращается — игра продолжается с того же места.
+    """
+    sessions = db_tower_load_all_sessions()
+    for s in sessions:
+        uid = s.pop('uid')
+        _sessions[uid] = s
+        msg_id = s.get('message_id')
+        if msg_id:
+            _game_board_owner[msg_id] = uid
+    if sessions:
+        logging.info(f"[tower] Восстановлено {len(sessions)} сессий из БД")
+
+
 # ── Локеры ─────────────────────────────────────────────────────────
 def _get_user_lock(user_id: int) -> asyncio.Lock:
     if user_id not in _user_locks:
@@ -110,6 +136,9 @@ async def _inactivity_watcher(user_id: int, bot: Bot):
             return
         session['finishing'] = True
 
+    # Удаляем из БД
+    db_tower_delete_session(user_id)
+
     bet = session.get('bet', 0)
     if bet > 0:
         db_add_px(user_id, bet)
@@ -121,9 +150,7 @@ async def _inactivity_watcher(user_id: int, bot: Bot):
         try:
             await bot.edit_message_text(
                 chat_id=chat_id, message_id=msg_id,
-                text=(
-                    "<blockquote><b>⏰ Игра закрыта!</b></blockquote>",
-                ),
+                text="<blockquote><b>⏰ Игра закрыта!</b></blockquote>",
                 parse_mode="HTML",
             )
         except Exception:
@@ -153,10 +180,6 @@ def _nickname(from_user) -> str:
     return name.strip() or getattr(from_user, 'username', None) or f"User {from_user.id}"
 
 def _active_game_error_text(session: dict) -> str:
-    diff          = session['difficulty']
-    bet           = session['bet']
-    floors_passed = session['floors_passed']
-    mult          = get_multiplier(diff, floors_passed)
     return (
         f"<blockquote><b>⚠️ У вас уже есть активная игра!</b></blockquote>"
     )
@@ -291,7 +314,6 @@ async def show_tower_menu(callback: CallbackQuery):
     if _has_active_game(user_id):
         await callback.answer("⚠️ Завершите текущую игру!", show_alert=True)
         return
-    balance = db_get_px(user_id)
     await callback.message.edit_text(
         f"<blockquote><b>🏰 Башня</b></blockquote>\n\n"
         f"<blockquote><b>Выберите сложность ниже:</b></blockquote>",
@@ -323,7 +345,6 @@ async def tower_diff_handler(callback: CallbackQuery, state: FSMContext):
     await state.update_data(tower_difficulty=difficulty)
     await state.set_state(TowerGame.choosing_bet)
 
-    balance = db_get_px(user_id)
     await callback.message.edit_text(
         f'<blockquote><b><tg-emoji emoji-id="5197269100878907942">👋</tg-emoji> Введите сумму ставки:</b></blockquote>',
         parse_mode=ParseMode.HTML,
@@ -370,6 +391,8 @@ async def tower_exit(callback: CallbackQuery, state: FSMContext):
             db_add_px(caller_id, bet)
         _sessions.pop(caller_id, None)
         _cancel_timeout(caller_id)
+        # Удаляем из БД
+        db_tower_delete_session(caller_id)
 
     await state.clear()
     from game import GAMES_TEXT, games_keyboard
@@ -443,6 +466,9 @@ async def tower_cell_handler(callback: CallbackQuery, state: FSMContext):
                 _sessions.pop(user_id, None)
 
             _cancel_timeout(user_id)
+            # Удаляем из БД — проигрыш
+            db_tower_delete_session(user_id)
+
             await state.clear()
 
             record_game_result(user_id, name, bet, 0.0)
@@ -468,6 +494,9 @@ async def tower_cell_handler(callback: CallbackQuery, state: FSMContext):
             floors_passed = session['floors_passed']
             mult          = get_multiplier(difficulty, floors_passed)
 
+            # Сохраняем прогресс в БД после каждого безопасного хода
+            db_tower_save_session(user_id, session)
+
             if session['current_floor'] >= FLOORS:
                 bet  = session['bet']
                 name = _nickname(callback.from_user)
@@ -480,6 +509,9 @@ async def tower_cell_handler(callback: CallbackQuery, state: FSMContext):
                 winnings = round(bet * mult, 2)
                 db_add_px(user_id, winnings)
                 _cancel_timeout(user_id)
+                # Удаляем из БД — победа
+                db_tower_delete_session(user_id)
+
                 await state.clear()
 
                 record_game_result(user_id, name, bet, winnings)
@@ -548,6 +580,9 @@ async def tower_cashout(callback: CallbackQuery, state: FSMContext):
 
     db_add_px(user_id, winnings)
     _cancel_timeout(user_id)
+    # Удаляем из БД — кэшаут
+    db_tower_delete_session(user_id)
+
     await state.clear()
 
     name = _nickname(callback.from_user)
@@ -641,13 +676,15 @@ async def process_tower_bet(message: Message, state: FSMContext):
     session['message_id'] = sent.message_id
     set_owner_fn(sent.message_id, user_id)
     _game_board_owner[sent.message_id] = user_id
+
+    # Сохраняем новую сессию в БД
+    db_tower_save_session(user_id, session)
+
     _start_timeout(user_id, message.bot)
 
 
 # ── Быстрая команда ────────────────────────────────────────────────
 # Форматы: башня 500 2 | /башня 500 2 | tower 500 2 | /tower 500 2
-# Молча игнорирует неверный формат, сложность не 1-4, сумму, нехватку средств
-# Показывает ошибку только при активной игре
 
 _QUICK_TOWER_RE = re.compile(
     r'^/?(?:башня|tower)\s+'
@@ -703,4 +740,8 @@ async def tower_quick_command(message: Message, state: FSMContext):
     session['message_id'] = sent.message_id
     set_owner_fn(sent.message_id, user_id)
     _game_board_owner[sent.message_id] = user_id
+
+    # Сохраняем новую сессию в БД
+    db_tower_save_session(user_id, session)
+
     _start_timeout(user_id, message.bot)
