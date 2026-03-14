@@ -285,69 +285,86 @@ def _parse_range(text: str):
 # ─────────────────────────────────────────
 #  Парсер ставки
 # ─────────────────────────────────────────
-_BET_RE = re.compile(r"^(\d+(?:[.,]\d+)?)\s+(.+)$", re.IGNORECASE | re.UNICODE)
-
+# ─────────────────────────────────────────
+#  Парсер одиночного типа ставки
+#  Принимает ОДИН токен (слово/число/диапазон)
+#  Возвращает ("тип", значение) | ("range_error", текст) | None
+# ─────────────────────────────────────────
 _EVEN_WORDS  = {"чет", "четное", "чётное", "even"}
 _ODD_WORDS   = {"нечет", "нечётное", "нечетное", "нечёт", "odd"}
 _RED_WORDS   = {"к", "красное", "крас", "red"}
 _BLACK_WORDS = {"ч", "черное", "чёрное", "black", "чер"}
 
 
+def _parse_token(token: str):
+    """
+    Парсит один токен ставки.
+    Возвращает (bet_type, bet_value) | ("range_error", token) | None
+    """
+    t = token.strip().lower()
+    if not t:
+        return None
+    if t in _EVEN_WORDS:
+        return ("even", None)
+    if t in _ODD_WORDS:
+        return ("odd", None)
+    if t in _RED_WORDS:
+        return ("red", None)
+    if t in _BLACK_WORDS:
+        return ("black", None)
+    # Диапазон вида lo-hi
+    if re.match(r'^\d+-\d+$', t):
+        rr = _parse_range(t)
+        if rr is None:
+            return ("range_error", token)
+        return ("range", rr)
+    # Одиночное число
+    if t.isdigit():
+        n = int(t)
+        if n > 36:
+            return None
+        return ("number", n)
+    return None
+
+
 def _parse_bet(text: str):
-    m = _BET_RE.match(text.strip())
-    if not m:
+    """
+    Парсит строку ставки: СУММА ТИП [ТИП2 ТИП3 ...]
+    Примеры:
+      100 к
+      100 5-20
+      100 2-30 2-24 3-7 к
+      100 7 14 21
+    Возвращает:
+      (amount, [(bet_type, bet_value), ...])  — успех
+      ("range_error", token)                  — некорректный диапазон
+      None                                    — не распознано
+    """
+    text = text.strip()
+    # Первый токен — сумма
+    parts = text.split()
+    if len(parts) < 2:
         return None
 
-    amount_str = m.group(1).replace(",", ".")
-    bet_raw    = m.group(2).strip().lower()
-
+    amount_str = parts[0].replace(",", ".")
     try:
         amount = float(amount_str)
     except ValueError:
         return None
-
     if amount <= 0:
         return None
 
+    # Остальные токены — типы ставок
+    bet_tokens = parts[1:]
     new_bets: list[tuple] = []
 
-    if bet_raw in _EVEN_WORDS:
-        new_bets = [("even", None)]
-    elif bet_raw in _ODD_WORDS:
-        new_bets = [("odd", None)]
-    elif bet_raw in _RED_WORDS:
-        new_bets = [("red", None)]
-    elif bet_raw in _BLACK_WORDS:
-        new_bets = [("black", None)]
-    else:
-        # ── Проверяем диапазон: одно выражение вида "lo-hi" ──
-        # Сначала смотрим — похоже ли вообще на диапазон (два числа через дефис)
-        _looks_like_range = re.match(r'^\d+-\d+$', bet_raw)
-        if _looks_like_range:
-            # Выглядит как диапазон — парсим строго
-            range_result = _parse_range(bet_raw)
-            if range_result is None:
-                # Диапазон есть, но некорректный — сообщаем об ошибке
-                return ("range_error", bet_raw)
-            new_bets = [("range", range_result)]
-        else:
-            # ── Числа (одиночные или через пробел) ──
-            parts = [p.strip() for p in bet_raw.split() if p.strip()]
-            if not parts:
-                return None
-
-            num_counts: dict[int, int] = {}
-            for part in parts:
-                if not part.isdigit():
-                    return None
-                n = int(part)
-                if n > 36:
-                    return None
-                num_counts[n] = num_counts.get(n, 0) + 1
-
-            for n, count in num_counts.items():
-                for _ in range(count):
-                    new_bets.append(("number", n))
+    for token in bet_tokens:
+        result = _parse_token(token)
+        if result is None:
+            return None
+        if isinstance(result, tuple) and result[0] == "range_error":
+            return result  # пробрасываем ошибку диапазона
+        new_bets.append(result)
 
     if not new_bets:
         return None
@@ -679,19 +696,22 @@ async def cmd_r(message: Message) -> None:
         await message.reply(
             '<tg-emoji emoji-id="5334544901428229844">🎟</tg-emoji> <b>Инструкция</b>\n\n'
             "<blockquote>"
-            "<code>100 7</code>           — число 7 (×35)\n"
-            "<code>100 5-17-32</code>     — числа через дефис (×35 каждое)\n"
-            "<code>100 5 17 32</code>     — числа через пробел (×35 каждое)\n"
-            "<code>100 к</code>           — красное (×1.9)\n"
-            "<code>100 ч</code>           — чёрное (×1.9)\n"
-            "<code>100 чет</code>         — чётное (×1.9)\n"
-            "<code>100 нечет</code>       — нечётное (×1.9)\n"
-            "<code>100 5-20</code>        — диапазон 5–20 (16 чисел, ×2.0)\n\n"
+            "<code>100 7</code>              — число 7 (×35)\n"
+            "<code>100 5 17 32</code>         — несколько чисел (×35 каждое)\n"
+            "<code>100 к</code>              — красное (×1.9)\n"
+            "<code>100 ч</code>              — чёрное (×1.9)\n"
+            "<code>100 чет</code>            — чётное (×1.9)\n"
+            "<code>100 нечет</code>          — нечётное (×1.9)\n"
+            "<code>100 5-20</code>           — диапазон 5–20 (×2.0)\n\n"
+            "<b>Несколько ставок одной командой:</b>\n"
+            "<code>100 2-30 2-24 3-7</code>  — три диапазона по 100 Px\n"
+            "<code>100 к ч 7</code>          — красное + чёрное + число 7\n"
+            "<code>100 5-20 к нечет</code>   — диапазон + красное + нечётное\n\n"
             "<b>Множители диапазонов:</b>\n"
-            "<code>2 числа → ×18  |  3 → ×12  |  4 → ×8</code>\n"
-            "<code>5 → ×6  |  6 → ×5  |  7 → ×4.5  |  8 → ×4</code>\n"
-            "<code>9 → ×3.5  |  10 → ×3  |  11–13 → ×2.7</code>\n"
-            "<code>14–18 → ×2  |  19–25 → ×1.4  |  26–30 → ×1.1</code>\n\n"
+            "<code>2 → ×18  |  3 → ×12  |  4 → ×8  |  5 → ×6</code>\n"
+            "<code>6 → ×5  |  7 → ×4.5  |  8 → ×4  |  9 → ×3.5</code>\n"
+            "<code>10 → ×3  |  11–13 → ×2.7  |  14–18 → ×2</code>\n"
+            "<code>19–25 → ×1.4  |  26–30 → ×1.1</code>\n\n"
             "<code>го</code>              — запустить игру\n"
             "<code>лог</code>             — последние 10 результатов\n"
             "<code>отмена / cancel</code> — отменить свои ставки\n\n"
