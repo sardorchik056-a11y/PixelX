@@ -1676,9 +1676,9 @@ async def main():
     init_exchange_db()
 
     # ── Восстанавливаем активные игры после рестарта ──
-    mines_restore_sessions()
-    gold_restore_sessions()
-    tower_restore_sessions()
+    mines_restore_sessions(bot)
+    gold_restore_sessions(bot)
+    tower_restore_sessions(bot)
     print("✅ Сессии игр восстановлены")
 
     inject_to_modules(bot)
