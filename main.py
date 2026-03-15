@@ -258,11 +258,8 @@ low_priority_router = Router()
 
 # ─────────────────────────────────────────
 #  Вспомогательная функция проверки подписки
-#  Возвращает True если всё ок, иначе
-#  отправляет/редактирует сообщение и возвращает False.
 # ─────────────────────────────────────────
 async def _require_sub_message(message: Message) -> bool:
-    """Проверка для обычных сообщений. Отвечает reply при провале."""
     ok, unsub = await check_subscribed(message.bot, message.from_user.id)
     if not ok:
         sent = await message.answer(sub_text(unsub), reply_markup=sub_keyboard(unsub))
@@ -272,10 +269,6 @@ async def _require_sub_message(message: Message) -> bool:
 
 
 async def _require_sub_callback(call: CallbackQuery) -> bool:
-    """
-    Проверка для callback-кнопок.
-    Редактирует текущее сообщение при провале.
-    """
     ok, unsub = await check_subscribed(call.bot, call.from_user.id)
     if not ok:
         try:
@@ -768,7 +761,7 @@ async def cb_check_exhausted_info(call: CallbackQuery):
 
 
 # ─────────────────────────────────────────
-#  /addchannel — добавить обязательный канал (только для админов)
+#  /addchannel — добавить обязательный канал
 # ─────────────────────────────────────────
 @dp.message(Command("addchannel"))
 async def cmd_addchannel(message: Message):
@@ -1094,7 +1087,7 @@ async def cb_about(call: CallbackQuery):
 
 
 # ─────────────────────────────────────────
-#  Лидеры
+#  Лидеры (callback)
 # ─────────────────────────────────────────
 @dp.callback_query(F.data == "leaders")
 async def cb_leaders(call: CallbackQuery):
@@ -1567,6 +1560,13 @@ _BALANCE_WORDS = {
     "баланс", "бал", "балик",
 }
 
+# ─────────────────────────────────────────
+#  Слова-триггеры для команд без слеша
+#  Ключ — нижний регистр слова, значение — тип команды
+# ─────────────────────────────────────────
+_TOP_WORDS = {"топ", "top"}
+_REF_WORDS = {"referrals", "рефералы", "реф", "ref"}
+
 
 async def _send_balance(message: Message):
     uid = message.from_user.id
@@ -1587,14 +1587,93 @@ async def _send_balance(message: Message):
     )
 
 
+async def _send_leaders(message: Message):
+    """Отправляет таблицу лидеров новым сообщением."""
+    uid = message.from_user.id
+    db_get_or_create_user(message.from_user)
+
+    if not await _require_sub_message(message):
+        return
+
+    sent = await message.answer(build_leaders_text(), reply_markup=back_main_keyboard())
+    set_owner(sent.message_id, uid)
+
+
+async def _send_referrals(message: Message):
+    """Отправляет раздел рефералов новым сообщением."""
+    uid = message.from_user.id
+    db_get_or_create_user(message.from_user)
+
+    if not await _require_sub_message(message):
+        return
+
+    from referrals import referrals_text, referrals_keyboard
+    bot_info = await message.bot.get_me()
+    sent = await message.answer(
+        referrals_text(uid, bot_info.username),
+        reply_markup=referrals_keyboard(uid, bot_info.username),
+        disable_web_page_preview=True,
+    )
+    set_owner(sent.message_id, uid)
+
+
+# ─────────────────────────────────────────
+#  /top, /топ — команды со слешем
+# ─────────────────────────────────────────
+@dp.message(Command("top", "топ"))
+async def cmd_top_slash(message: Message):
+    await _send_leaders(message)
+
+
+# ─────────────────────────────────────────
+#  /referrals, /рефералы, /реф, /ref — команды со слешем
+# ─────────────────────────────────────────
+@dp.message(Command("referrals", "рефералы", "реф", "ref"))
+async def cmd_referrals_slash(message: Message):
+    await _send_referrals(message)
+
+
+# ─────────────────────────────────────────
+#  /b, /б, /bal и т.д. — баланс со слешем
+# ─────────────────────────────────────────
 @dp.message(Command("b", "б", "bal", "balance", "баланс", "бал", "балик"))
 async def cmd_balance_slash(message: Message):
     await _send_balance(message)
 
 
+# ─────────────────────────────────────────
+#  low_priority_router — текстовые команды без слеша
+# ─────────────────────────────────────────
 @low_priority_router.message(F.text)
 async def cmd_low_priority_text(message: Message):
     text = (message.text or "").strip()
+
+    # Команда должна быть ОДНИМ словом (без пробелов и переносов)
+    # Если в тексте есть пробел или перенос — это не команда
+    if " " in text or "\n" in text:
+        # Исключение: рулетка, дуэли и промо могут содержать пробелы — они проверяются ниже
+        pass
+    else:
+        word = text.lower()
+
+        # ── Топ ──
+        if word in _TOP_WORDS:
+            if not await _require_sub_message(message):
+                return
+            await _send_leaders(message)
+            return
+
+        # ── Рефералы ──
+        if word in _REF_WORDS:
+            if not await _require_sub_message(message):
+                return
+            await _send_referrals(message)
+            return
+
+        # ── Баланс ──
+        if word in _BALANCE_WORDS:
+            await _send_balance(message)
+            return
 
     # ── Рулетка: отмена ставок ──
     if is_roulette_cancel(text):
@@ -1643,14 +1722,6 @@ async def cmd_low_priority_text(message: Message):
             return
         await handle_del(message)
         return
-
-    # ── Баланс ──
-    if " " in text or "\n" in text:
-        return
-    if text.lower() not in _BALANCE_WORDS:
-        return
-
-    await _send_balance(message)
 
 
 # ─────────────────────────────────────────
