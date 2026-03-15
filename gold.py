@@ -75,12 +75,13 @@ class GoldGame(StatesGroup):
 
 gold_router = Router()
 
-_sessions:         dict = {}
-_timeout_tasks:    dict = {}
-_user_locks:       dict = {}
-_bet_locks:        dict = {}
-_game_board_owner: dict = {}
-_cell_cooldowns:   dict[int, float] = {}  # user_id → last_click_time
+_sessions:            dict = {}
+_timeout_tasks:       dict = {}
+_user_locks:          dict = {}
+_bet_locks:           dict = {}
+_game_board_owner:    dict = {}
+_cell_cooldowns:      dict[int, float] = {}   # user_id → last_click_time
+_action_in_progress:  dict[int, bool]  = {}   # user_id → True пока ход обрабатывается
 
 def _noop_set_owner(message_id: int, user_id: int): pass
 def _noop_is_owner(message_id: int, user_id: int) -> bool: return True
@@ -102,7 +103,6 @@ def restore_sessions_from_db(bot: Bot) -> None:
         msg_id = s.get('message_id')
         if msg_id:
             _game_board_owner[msg_id] = uid
-        # Запускаем таймер бездействия для восстановленной сессии
         _start_timeout(uid, bot)
     if sessions:
         logging.info(f"[gold] Восстановлено {len(sessions)} сессий из БД")
@@ -150,7 +150,6 @@ async def _inactivity_watcher(user_id: int, bot: Bot):
         session['finishing'] = True
         _sessions.pop(user_id, None)
 
-    # Удаляем из БД
     db_gold_delete_session(user_id)
 
     bet = session.get('bet', 0)
@@ -164,9 +163,7 @@ async def _inactivity_watcher(user_id: int, bot: Bot):
         try:
             await bot.edit_message_text(
                 chat_id=chat_id, message_id=msg_id,
-                text=(
-                    "<blockquote><b>⏰ Игра закрыта!</b></blockquote>"
-                ),
+                text="<blockquote><b>⏰ Игра закрыта!</b></blockquote>",
                 parse_mode=ParseMode.HTML,
             )
         except Exception:
@@ -362,7 +359,6 @@ async def gold_exit(callback: CallbackQuery, state: FSMContext):
             db_add_px(caller_id, bet)
         _sessions.pop(caller_id, None)
         _cancel_timeout(caller_id)
-        # Удаляем из БД
         db_gold_delete_session(caller_id)
 
     await state.clear()
@@ -401,35 +397,39 @@ async def gold_cell_handler(callback: CallbackQuery, state: FSMContext):
     user_id = caller_id
 
     if not session:
-        # Сессия уже завершена (таймаут/бомба), но кнопки ещё видны — тихо игнорируем
         await callback.answer(); return
     if session.get('message_id') != msg_id:
-        # Старое сообщение от предыдущей игры — тихо игнорируем
         await callback.answer(); return
     if session.get('finishing'):
         await callback.answer(); return
     if floor_idx != session['current_floor']:
         await callback.answer(); return
 
-    processing = session.setdefault('processing_cells', set())
-    if col in processing:
-        await callback.answer(); return
+    # ── Блокировка: один ход за раз ──────────────────────────────
+    if _action_in_progress.get(user_id):
+        await callback.answer("⏳ Подождите — ход обрабатывается...", show_alert=False)
+        return
 
-    # ── Кулдаун 0.4 сек между кликами (лимит Telegram API) ──
+    # ── Кулдаун 0.4 сек между кликами (лимит Telegram API) ──────
     _now = time.monotonic()
     if _now - _cell_cooldowns.get(user_id, 0) < CELL_COOLDOWN:
         await callback.answer(); return
     _cell_cooldowns[user_id] = _now
 
+    _action_in_progress[user_id] = True
+
     lock = _get_user_lock(user_id)
     async with lock:
         session = _sessions.get(user_id)
         if not session or session.get('finishing'):
+            _action_in_progress.pop(user_id, None)
             await callback.answer(); return
         if floor_idx != session['current_floor']:
+            _action_in_progress.pop(user_id, None)
             await callback.answer(); return
         processing = session.setdefault('processing_cells', set())
         if col in processing:
+            _action_in_progress.pop(user_id, None)
             await callback.answer(); return
         processing.add(col)
 
@@ -452,7 +452,6 @@ async def gold_cell_handler(callback: CallbackQuery, state: FSMContext):
             _sessions.pop(user_id, None)
 
             _cancel_timeout(user_id)
-            # Удаляем из БД — проигрыш
             db_gold_delete_session(user_id)
 
             await state.clear()
@@ -481,7 +480,6 @@ async def gold_cell_handler(callback: CallbackQuery, state: FSMContext):
             floors_passed = session['floors_passed']
             mult          = get_multiplier(floors_passed)
 
-            # Сохраняем прогресс в БД после каждого безопасного хода
             db_gold_save_session(user_id, session)
 
             if session['current_floor'] >= FLOORS:
@@ -494,7 +492,6 @@ async def gold_cell_handler(callback: CallbackQuery, state: FSMContext):
                 winnings = round(bet * mult, 2)
                 db_add_px(user_id, winnings)
                 _cancel_timeout(user_id)
-                # Удаляем из БД — победа
                 db_gold_delete_session(user_id)
 
                 await state.clear()
@@ -529,6 +526,7 @@ async def gold_cell_handler(callback: CallbackQuery, state: FSMContext):
                 await callback.answer(f"x{mult}")
 
     finally:
+        _action_in_progress.pop(user_id, None)
         s = _sessions.get(user_id)
         if s:
             s.get('processing_cells', set()).discard(col)
@@ -564,7 +562,6 @@ async def gold_cashout(callback: CallbackQuery, state: FSMContext):
 
     db_add_px(user_id, winnings)
     _cancel_timeout(user_id)
-    # Удаляем из БД — кэшаут
     db_gold_delete_session(user_id)
 
     await state.clear()
@@ -663,15 +660,11 @@ async def process_gold_bet(message: Message, state: FSMContext):
     set_owner_fn(sent.message_id, user_id)
     _game_board_owner[sent.message_id] = user_id
 
-    # Сохраняем новую сессию в БД
     db_gold_save_session(user_id, session)
-
     _start_timeout(user_id, message.bot)
 
 
 # ── Быстрая команда ────────────────────────────────────────────────
-# Форматы: золото 1000 | /золото 1000 | gold 1000 | /gold 1000
-
 _QUICK_GOLD_RE = re.compile(
     r'^/?(?:золото|gold)\s+'
     r'(\d+(?:[.,]\d+)?)'
@@ -725,7 +718,5 @@ async def gold_quick_command(message: Message, state: FSMContext):
     set_owner_fn(sent.message_id, user_id)
     _game_board_owner[sent.message_id] = user_id
 
-    # Сохраняем новую сессию в БД
     db_gold_save_session(user_id, session)
-
     _start_timeout(user_id, message.bot)
