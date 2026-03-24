@@ -639,39 +639,47 @@ async def _place_bet(message: Message, amount: float, new_bets: list) -> None:
 
 # ─────────────────────────────────────────
 #  Отмена ставок игрока
+#  FIX: используем game["lock"] чтобы исключить гонку с _execute_game.
+#  Теперь чтение running + удаление ставок + возврат средств — атомарны
+#  относительно старта игры.
 # ─────────────────────────────────────────
 async def _cancel_bets(message: Message) -> None:
     uid     = message.from_user.id
     chat_id = message.chat.id
     game    = _get_game(chat_id)
 
-    if game["running"]:
-        await message.reply(
-            "⏳ <b>Игра уже идёт — отмена невозможна!</b>",
-            parse_mode=ParseMode.HTML,
-        )
-        return
+    # Захватываем лок — тот же, что держит _execute_game при старте.
+    # Пока мы внутри, игра не может перейти в running=True и утащить ставки.
+    async with game["lock"]:
+        if game["running"]:
+            await message.reply(
+                "⏳ <b>Игра уже идёт — отмена невозможна!</b>",
+                parse_mode=ParseMode.HTML,
+            )
+            return
 
-    player_bets = [b for b in game["bets"] if b["uid"] == uid]
+        player_bets = [b for b in game["bets"] if b["uid"] == uid]
 
-    if not player_bets:
-        await message.reply(
-            '<tg-emoji emoji-id="5429518319243775957">🎟</tg-emoji> <b>У вас нет активных ставок.</b>',
-            parse_mode=ParseMode.HTML,
-        )
-        return
+        if not player_bets:
+            await message.reply(
+                '<tg-emoji emoji-id="5429518319243775957">🎟</tg-emoji> <b>У вас нет активных ставок.</b>',
+                parse_mode=ParseMode.HTML,
+            )
+            return
 
-    refund_total = round(sum(b["amount"] for b in player_bets), 2)
-    game["bets"] = [b for b in game["bets"] if b["uid"] != uid]
+        refund_total = round(sum(b["amount"] for b in player_bets), 2)
+        # Удаляем ставки игрока ДО возврата средств — исключаем двойной возврат
+        game["bets"] = [b for b in game["bets"] if b["uid"] != uid]
 
+        if not game["bets"]:
+            _cancel_auto(chat_id)
+            game["first_bet_time"] = None
+
+    # Возврат средств — вне лока (I/O к БД не должен держать лок)
     try:
         _db_add_px(uid, refund_total)
     except Exception as e:
         log.error("_cancel_bets: db_add_px failed uid=%s: %s", uid, e)
-
-    if not game["bets"]:
-        _cancel_auto(chat_id)
-        game["first_bet_time"] = None
 
     link = _user_link(uid, message.from_user.username, message.from_user.first_name or "?")
 
