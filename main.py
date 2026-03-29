@@ -1499,6 +1499,53 @@ def _db_get_all_user_ids() -> list[int]:
     return [row[0] for row in rows]
 
 
+# ─────────────────────────────────────────
+#  /cg — Отмена своих активных игр (для всех пользователей)
+# ─────────────────────────────────────────
+@dp.message(Command("cg"))
+async def cmd_cg(message: Message):
+    uid = message.from_user.id
+    db_get_or_create_user(message.from_user)
+
+    # Отменяем сессии во всех трёх играх
+    mines_bet = await _mines_module.admin_cancel_session(uid)
+    gold_bet  = await _gold_module.admin_cancel_session(uid)
+    tower_bet = await _tower_module.admin_cancel_session(uid)
+
+    total_refund = round(mines_bet + gold_bet + tower_bet, 2)
+
+    # Возвращаем ставку на баланс
+    if total_refund > 0:
+        db_add_px(uid, total_refund)
+
+    # Нет активных игр
+    if total_refund == 0:
+        await message.answer(
+            f'<blockquote>ℹ️ У вас нет активных игр.</blockquote>',
+            parse_mode="HTML",
+        )
+        return
+
+    # Формируем отчёт
+    lines = []
+    if mines_bet > 0:
+        lines.append(f'💣 Мины: <code>+{mines_bet:,.2f} Px</code>')
+    if gold_bet > 0:
+        lines.append(f'💰 Золото: <code>+{gold_bet:,.2f} Px</code>')
+    if tower_bet > 0:
+        lines.append(f'🗼 Башня: <code>+{tower_bet:,.2f} Px</code>')
+
+    report = "\n".join(lines)
+    new_balance = db_get_px(uid)
+    await message.answer(
+        f'<blockquote><b>✅ Игры отменены!</b>\n\n'
+        f'{report}\n\n'
+        f'💵 Возвращено: <code>{total_refund:,.2f} Px</code>\n'
+        f'📊 Баланс: <code>{new_balance:,.2f} Px</code></blockquote>',
+        parse_mode="HTML",
+    )
+
+
 @dp.message(Command("reck"))
 async def cmd_reck(message: Message, command: CommandObject):
     admin_uid = message.from_user.id
