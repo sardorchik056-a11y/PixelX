@@ -1538,10 +1538,7 @@ async def cmd_cg(message: Message):
     report = "\n".join(lines)
     new_balance = db_get_px(uid)
     await message.answer(
-        f'<blockquote><b>✅ Игры отменены!</b>\n\n'
-        f'{report}\n\n'
-        f'💵 Возвращено: <code>{total_refund:,.2f} Px</code>\n'
-        f'📊 Баланс: <code>{new_balance:,.2f} Px</code></blockquote>',
+        f'<blockquote><b><tg-emoji emoji-id="5420323339723881652">📢</tg-emoji>Игры отменены! ставки возвращены</b></blockquote>',
         parse_mode="HTML",
     )
 
