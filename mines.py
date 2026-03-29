@@ -783,3 +783,22 @@ async def mines_quick_command(message: Message, state: FSMContext):
 
     db_mines_save_session(user_id, session)
     _start_timeout(user_id, message.bot)
+
+
+# ── Административная отмена сессии ─────────────────────────────────
+async def admin_cancel_session(user_id: int) -> float:
+    """
+    Принудительно завершает активную игру пользователя (для команды /cg).
+    Возвращает сумму ставки, которую нужно вернуть на баланс (0 если игры нет).
+    """
+    lock = _get_user_lock(user_id)
+    async with lock:
+        session = _sessions.pop(user_id, None)
+        if session is None:
+            return 0.0
+        session['finishing'] = True
+
+    _cancel_timeout(user_id)
+    db_mines_delete_session(user_id)
+
+    return float(session.get('bet', 0))
